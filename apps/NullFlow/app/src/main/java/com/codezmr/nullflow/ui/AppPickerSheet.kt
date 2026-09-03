@@ -119,8 +119,8 @@ fun AppPickerSheet(
 
             // App list
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 96.dp)
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(installed, key = { it.packageName }) { app ->
                     val checked = app.packageName in blockedPackages
@@ -164,6 +164,39 @@ fun AppPickerSheet(
                     }
                 }
             }
+
+            // ---- Done bar (closes the sheet) ----
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable {
+                            Haptics.engage(context)
+                            AppLog.d("AppPicker: DONE tapped — closing sheet ($blockedPackages.size apps)")
+                            onDismiss()
+                        }
+                        .height(54.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (blockedPackages.size > 0)
+                            "Done · ${blockedPackages.size} app${if (blockedPackages.size == 1) "" else "s"} selected"
+                        else
+                            "Done",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
         }
     }
 }
@@ -196,7 +229,10 @@ private fun toggleApp(
                         )
                     )
                 )
-                AppLog.d("AppPicker: BLOCKED ${app.packageName} in profile $profileId")
+                // Mark this profile active so the hero toggle finds it.
+                dao.clearActive()
+                dao.setActive(profileId, true)
+                AppLog.d("AppPicker: BLOCKED ${app.packageName} in profile $profileId (now active)")
             }
         } catch (e: Exception) {
             AppLog.e("AppPicker: toggle app FAILED", e)

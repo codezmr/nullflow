@@ -70,10 +70,16 @@ fun MainScreen(
     val totalMs by dao.observeTotalFocusedMs().collectAsState(initial = 0L)
     val completedCount by dao.observeCompletedCount().collectAsState(initial = 0)
 
-    // Live count of blocked apps for the active profile (drives the "add apps"
+    // The profile the UI is "pointing at": the active one if set, otherwise the
+    // first existing profile. This keeps the profile row, the blocked-app count,
+    // and the toggle all in agreement (and stops the toggle from minting a new
+    // empty profile on every tap).
+    val effectiveProfile: FocusProfile? = activeProfile ?: profiles.firstOrNull()
+
+    // Live count of blocked apps for the effective profile (drives the "add apps"
     // guard + the "N apps shielded" stat).
-    val blockedApps by remember(activeProfile?.id) {
-        val id = activeProfile?.id
+    val blockedApps by remember(effectiveProfile?.id) {
+        val id = effectiveProfile?.id
         if (id != null) dao.observeBlockedApps(id) else flowOf(emptyList())
     }.collectAsState(initial = emptyList())
     val blockedCount = blockedApps.size
@@ -113,12 +119,15 @@ fun MainScreen(
             // Turn ON — one tap, zero popups.
             // VpnService.prepare() was already answered during onboarding,
             // so the tunnel establishes immediately.
-            val profileId = current?.id ?: createDefaultProfile(dao)
+            //
+            // Profile resolution: the effective profile (active, else first
+            // existing), or a brand-new default only if none exist at all.
+            val profileId = effectiveProfile?.id ?: createDefaultProfile(dao)
 
             // Guard: nothing to shield → don't start the service (it would
             // immediately stop), and tell the user to add apps first.
             if (blockedCount == 0) {
-                AppLog.w("TOGGLE → blocked, 0 apps in profile. Opening picker.")
+                AppLog.w("TOGGLE → blocked, 0 apps in profile $profileId. Opening picker.")
                 Haptics.tick(context)
                 onOpenPicker(profileId)
                 return
@@ -179,16 +188,16 @@ fun MainScreen(
             )
 
             // Active profile name + edit
-            if (activeProfile != null) {
+            if (effectiveProfile != null) {
                 Spacer(Modifier.height(14.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.clickable {
-                        onOpenPicker(activeProfile!!.id)
+                        onOpenPicker(effectiveProfile!!.id)
                     }
                 ) {
                     Text(
-                        text = activeProfile!!.name,
+                        text = effectiveProfile!!.name,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
                     )
