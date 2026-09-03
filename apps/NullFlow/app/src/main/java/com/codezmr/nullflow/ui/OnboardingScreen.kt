@@ -16,6 +16,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -151,23 +153,41 @@ fun OnboardingScreen(onEnter: () -> Unit) {
 
     val allGranted = hasNotificationPerm && hasVpnPerm
 
+    // Version + year (for the footer).
+    val versionName = remember {
+        try {
+            context.packageManager
+                .getPackageInfo(context.packageName, 0).versionName
+        } catch (_: Exception) {
+            "1.0"
+        }
+    }
+    val year = remember {
+        java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(PureBlack)
     ) {
+        // ---- Ambient background: soft radial glows (premium depth) ----
+        AmbientGlow()
+
+        // ---- Scrollable content ----
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 30.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 26.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(64.dp))
+            Spacer(Modifier.height(48.dp))
 
             // ---- Breathing hero (3D matte toggle + icy LED) ----
             BreathingHero()
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(30.dp))
 
             // ---- Value proposition (big, stark, absolute) ----
             Text(
@@ -176,71 +196,77 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = StarkWhite,
                 textAlign = TextAlign.Center,
-                lineHeight = 34.sp
+                lineHeight = 36.sp
             )
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(14.dp))
 
-            // ---- Zero Data guarantee (the Halo anchor) ----
-            Text(
-                text = "Your privacy shield runs 100% locally.",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = StarkWhite.copy(alpha = 0.92f),
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "0 bytes of data ever leave this phone.",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = IcyBlue,
-                textAlign = TextAlign.Center
-            )
+            // ---- Zero Data guarantee (the Halo anchor) — as a pill badge ----
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50.dp))
+                    .background(IcyBlue.copy(alpha = 0.10f))
+                    .border(
+                        width = 1.dp,
+                        color = IcyBlue.copy(alpha = 0.25f),
+                        shape = RoundedCornerShape(50.dp)
+                    )
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🔒",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "100% local · 0 bytes leave this phone",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = IcyBlue,
+                    letterSpacing = 0.3.sp
+                )
+            }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(30.dp))
 
             // ---- Rotating tip / trick / motivation (auto + tap to swap) ----
             TipCard()
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(30.dp))
 
-            // ---- How it works (3 quiet feature rows) ----
-            FeatureRow(
+            // ---- Section label ----
+            SectionLabel("How it works")
+
+            Spacer(Modifier.height(14.dp))
+
+            // ---- How it works (3 rich feature cards) ----
+            FeatureCard(
                 icon = "◉",
                 title = "Pick the apps to silence",
                 desc = "Choose any apps. They go dark — everything else stays connected."
             )
-            Spacer(Modifier.height(10.dp))
-            FeatureRow(
-                icon = "⬤",
+            Spacer(Modifier.height(12.dp))
+            FeatureCard(
+                icon = "⚡",
                 title = "One tap, zero popups",
                 desc = "Flip the switch. The shield engages instantly, right on this phone."
             )
-            Spacer(Modifier.height(10.dp))
-            FeatureRow(
+            Spacer(Modifier.height(12.dp))
+            FeatureCard(
                 icon = "✦",
                 title = "Your data never moves",
                 desc = "No servers, no accounts, no tracking. It all stays on your device."
             )
 
-            Spacer(Modifier.height(28.dp))
-
             // ---- Permission checklist (ONLY show what's still needed) ----
-            // If a permission is already granted, we hide its row entirely so
-            // returning users see a clean, fast screen.
             val needsNotif = !hasNotificationPerm
             val needsVpn = !hasVpnPerm
 
             if (needsNotif || needsVpn) {
-                Text(
-                    text = "One-time setup",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = IcyBlue,
-                    letterSpacing = 1.5.sp
-                )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(30.dp))
+                SectionLabel("One-time setup")
+                Spacer(Modifier.height(14.dp))
             }
 
             if (needsNotif) {
@@ -259,7 +285,7 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                         }
                     }
                 )
-                if (needsVpn) Spacer(Modifier.height(16.dp))
+                if (needsVpn) Spacer(Modifier.height(14.dp))
             }
 
             if (needsVpn) {
@@ -281,7 +307,7 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 )
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(34.dp))
 
             // ---- Gatekeeper button ----
             GatekeeperButton(
@@ -293,20 +319,9 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 }
             )
 
-            Spacer(Modifier.height(30.dp))
+            Spacer(Modifier.height(28.dp))
 
             // ---- Footer: quiet brand lockup (mark + wordmark · hairline · legal) ----
-            val versionName = remember {
-                try {
-                    context.packageManager
-                        .getPackageInfo(context.packageName, 0).versionName
-                } catch (_: Exception) {
-                    "1.0"
-                }
-            }
-            val year = remember {
-                java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-            }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // Brand lockup: the null-ring mark + "codezmr"
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -351,7 +366,121 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 )
             }
 
-            Spacer(Modifier.height(30.dp))
+            Spacer(Modifier.height(36.dp))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ambient glow — soft radial gradients for premium depth (non-interactive)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun AmbientGlow() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        ElectricBlue.copy(alpha = 0.18f),
+                        ElectricBlue.copy(alpha = 0.0f)
+                    ),
+                    center = Offset(x = 0f, y = 0f),
+                    radius = 900f
+                )
+            )
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        NeonCyan.copy(alpha = 0.10f),
+                        NeonCyan.copy(alpha = 0.0f)
+                    ),
+                    center = Offset(x = 1200f, y = 1600f),
+                    radius = 700f
+                )
+            )
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Section label — small uppercase eyebrow text
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = IcyBlue.copy(alpha = 0.8f),
+        letterSpacing = 2.0.sp,
+        modifier = Modifier.padding(start = 4.dp)
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Feature card — a rich neumorphic card (icon chip + title + description)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun FeatureCard(icon: String, title: String, desc: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .shadow(elevation = 8.dp, shape = RoundedCornerShape(20.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF14141A), Color(0xFF0E0E12))
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = StarkWhite.copy(alpha = 0.06f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Icon chip
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(IcyBlue.copy(alpha = 0.12f))
+                .border(
+                    width = 1.dp,
+                    color = IcyBlue.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(14.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = icon,
+                style = MaterialTheme.typography.titleMedium,
+                color = IcyBlue
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = StarkWhite.copy(alpha = 0.95f)
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = StarkWhite.copy(alpha = 0.55f),
+                lineHeight = 17.sp
+            )
         }
     }
 }
@@ -548,43 +677,6 @@ private fun TipCard() {
             style = MaterialTheme.typography.bodyMedium,
             color = IcyBlue.copy(alpha = 0.5f)
         )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Feature row — a quiet "how it works" line (icon + title + description)
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun FeatureRow(icon: String, title: String, desc: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            text = icon,
-            style = MaterialTheme.typography.bodyLarge,
-            color = IcyBlue,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = StarkWhite.copy(alpha = 0.9f)
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = desc,
-                style = MaterialTheme.typography.bodySmall,
-                color = StarkWhite.copy(alpha = 0.5f),
-                lineHeight = 16.sp
-            )
-        }
     }
 }
 
