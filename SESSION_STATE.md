@@ -15,10 +15,40 @@
 
 ---
 
-## ✅ Current Status: BUILT — core flow WORKS + stale-state reconcile
+## ✅ Current Status: BUILT — OFF now fully cleans up (VPN icon + notif)
 
-**Built 2026-09-03 (commit `939480c`):** `NullFlow.apk` (23 MB) at
+**Built 2026-09-03 (commit `1ee1e86`):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### 🐛 BUGS FIXED: shield didn't fully turn off
+User report: (1) "End session" from notification did nothing, (2) VPN icon
+stayed in status bar after OFF, (3) "Local Privacy Shield is active"
+notification lingered.
+Root cause: `onDestroy()` closed the tunnel fd but **never called
+`stopForeground()`** → the foreground notification + VPN status-bar icon were
+orphaned. Also the notification's "End session" PendingIntent (request code 1)
+coalesced with the toggle's stop intent.
+**Fixes (`FocusVpnService`):**
+- `onDestroy()`: now calls `stopForeground(STOP_FOREGROUND_REMOVE)` +
+  `NotificationManager.cancel(NOTIF_ID)` → clears the notification + VPN icon.
+- `onStartCommand(ACTION_STOP)`: calls `stopForeground(REMOVE)` immediately
+  (instant UI update) before `stopSelf()`.
+- "End session" PendingIntent now uses **request code 2** (distinct from the
+  toggle's code 1) so the two stop intents never coalesce.
+
+### ⚠️ Still to verify on device
+- Toggle OFF → VPN icon + notification disappear immediately.
+- "End session" from notification → shield turns off + icon/notif gone.
+- Full cycle: ON (icon+notif appear) → OFF (icon+notif gone) → ON again.
+
+**Next:** Zamir installs `1ee1e86`, tests OFF cleanup + notification End-session.
+Share `Download/NullFlow/nullflow.log` if anything misbehaves.
+
+---
+
+## ✅ Previous Status: BUILT — core flow WORKS + stale-state reconcile
+
+**Built 2026-09-03 (commit `939480c`):** `NullFlow.apk` (23 MB).
 
 ### ✅ CORE FLOW CONFIRMED WORKING (from device log)
 Pick apps → Done → toggle ON → **Shield ACTIVE — 2 apps blackholed** (no crash,
