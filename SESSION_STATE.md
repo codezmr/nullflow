@@ -1,8 +1,11 @@
-# FocusWall — Session State
+# NullFlow — Session State
 
 > **Read this first to resume.** Last updated: 2026-09-03.
 > Goal: per-app internet kill-switch ("selective Offline Switch") via a local
 > VPN blackhole. Premium UI: hero toggle + haptics + bottom sheets.
+>
+> **Brand:** NullFlow · package `com.codezmr.nullflow` · company Codezmr
+> Tagline: "Disconnect on your terms." (full branding in doc/APP_IDEA.md)
 >
 > ⚠️ **HARD RULE: NEVER build the APK without asking Zamir first.**
 > Discuss + finish all code changes, THEN ask "build or not?". Wait for the go-ahead.
@@ -16,22 +19,25 @@
 
 **Done so far:**
 - Local git repo initialized (no remote, ever).
-- `doc/APP_IDEA.md` — full app idea + 5-phase architecture (read-only reference).
+- `doc/APP_IDEA.md` — full app idea + branding + 5-phase architecture (read-only reference).
 - Gradle wrapper copied from SnapTriage (Gradle 8.7, cached).
 - `local.properties` → `sdk.dir=/home/mohmmad/Android/Sdk`.
-- Directory skeleton: `apps/FocusWall/app/src/main/java/com/focuswall/app/{data,ui,vpn}`.
+- **Phase 1 COMPLETE:** root + app `build.gradle.kts` (compileSdk 34, minSdk 30,
+  Room 2.6.1 + KSP 1.9.22-1.0.17, coroutines 1.7.1, APK renamed to
+  `NullFlow-debug-v1.0.apk`), `settings.gradle.kts`, `gradle.properties`,
+  `AndroidManifest.xml` (VIBRATE, FOREGROUND_SERVICE + _DATA_SYNC,
+  QUERY_ALL_PACKAGES + FocusVpnService with BIND_VPN_SERVICE), res/
+  (strings, colors, themes, adaptive launcher icon — hand-drawn "null ring + slash").
+- Directory skeleton: `apps/NullFlow/app/src/main/java/com/codezmr/nullflow/{data,ui,vpn}`.
 
 **Next (in order):**
-1. Phase 1: root + app `build.gradle.kts`, `settings.gradle.kts`,
-   `gradle.properties`, `AndroidManifest.xml` (VIBRATE, FOREGROUND_SERVICE,
-   QUERY_ALL_PACKAGES + FocusVpnService with BIND_VPN_SERVICE).
-2. Phase 2: Room (FocusProfile / BlockedApp / FocusSession + DAOs) +
+1. Phase 2: Room (FocusProfile / BlockedApp / FocusSession + DAOs) +
    PackageManagerRepo.
 3. Phase 3: FocusVpnService (blackhole logic — see doc/APP_IDEA.md Phase 3,
    CRUCIAL: use `addAllowedApplication`, NOT `addDisallowedApplication`).
 4. Phase 4: UI (hero toggle + haptics + pre-prompt sheet + app picker sheet).
 5. Phase 5: **ASK ZAMIR BEFORE BUILDING.** `./gradlew assembleDebug --no-daemon`
-   → `app/build/outputs/apk/debug/FocusWall-debug-v1.0.apk`.
+   → `app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`.
 
 ---
 
@@ -41,7 +47,7 @@
 3Sep2026_app_freez/
 ├── SESSION_STATE.md          ← this file
 ├── doc/APP_IDEA.md           ← idea + architecture (read-only reference)
-└── apps/FocusWall/
+└── apps/NullFlow/
     ├── build.gradle.kts      ← AGP 8.5.2, Kotlin 1.9.22
     ├── settings.gradle.kts
     ├── gradle.properties
@@ -51,7 +57,7 @@
         ├── build.gradle.kts  ← compileSdk 34, minSdk 30, compose, Room+KSP, coroutines
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/focuswall/app/
+            ├── java/com/codezmr/nullflow/
             │   ├── MainActivity.kt
             │   ├── data/       ← Room DB, entities, DAOs, PackageManagerRepo
             │   ├── ui/         ← Compose screens (hero toggle, sheets, theme)
@@ -75,7 +81,7 @@
 | JDK | 17 (sourceCompat/jvmTarget) |
 | SDK | `~/Android/Sdk` (android-34, android-36) |
 
-**APK rename:** `app/build.gradle.kts` has an `android.applicationVariants.all { ... outputFileName = "FocusWall-debug-v1.0.apk" }` block (legacy API — `androidComponents.outputFileName` doesn't exist in AGP 8.5.2).
+**APK rename:** `app/build.gradle.kts` has an `android.applicationVariants.all { ... outputFileName = "NullFlow-debug-v1.0.apk" }` block (legacy API — `androidComponents.outputFileName` doesn't exist in AGP 8.5.2).
 
 ---
 
@@ -102,10 +108,10 @@
 
 ## 🖥️ Build / Install / Debug
 
-- **APK:** `apps/FocusWall/app/build/outputs/apk/debug/FocusWall-debug-v1.0.apk`
-- **Build:** `cd apps/FocusWall && ./gradlew assembleDebug --no-daemon`
-- **Install:** `adb install -r apps/FocusWall/app/build/outputs/apk/debug/FocusWall-debug-v1.0.apk`
-- **Logcat:** `adb logcat -s FocusWall`
+- **APK:** `apps/NullFlow/app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`
+- **Build:** `cd apps/NullFlow && ./gradlew assembleDebug --no-daemon`
+- **Install:** `adb install -r apps/NullFlow/app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`
+- **Logcat:** `adb logcat -s NullFlow`
 
 ---
 

@@ -1,9 +1,31 @@
-# FocusWall — App Idea (What We Are Building)
+# NullFlow — App Idea (What We Are Building)
 
 > A digital boundary tool. A selective "Offline Switch" that kills internet
 > access for specific, intrusive apps (WhatsApp, Instagram…) while the rest of
 > the phone works normally. Senders see a "single tick". No data ever leaves
 > the phone.
+
+**Package:** `com.codezmr.nullflow` · **Company:** Codezmr
+
+---
+
+## Branding
+
+**Slogans (pick per surface):**
+- Big Tech minimalist: *"Disconnect on your terms."* / *"Silence the noise. Keep the connection."* / *"Offline where it matters."*
+- Action & result: *"Turn the world to a single tick."* / *"The escape hatch for your messaging apps."* / *"Pause the app. Keep the internet."*
+- Psychological: *"Reclaim your focus. Ghost the noise."* / *"Boundaries for your digital life."* / *"Protect your peace, one app at a time."*
+
+**Play Store:**
+- Category: Productivity (or Tools)
+- Tags (pick 5): Device Security, Productivity, Focus, Utility, Parental Control
+  (only the last one if we add a PIN-lock)
+- SEO keywords: app blocker, offline mode, focus timer, block internet access,
+  limit app usage · WhatsApp offline, hide online status, single tick WhatsApp,
+  block WiFi for apps, digital detox, ADHD focus · Local VPN, loopback firewall,
+  rootless firewall, network blocker
+
+**Name check (2026-09-03):** "NullFlow" does not exist on Google Play — clear runway.
 
 ---
 
@@ -49,7 +71,7 @@
 ### Phase 1 — Scaffolding & Permissions
 - Gradle: compileSdk 34, minSdk 30, Compose BOM 2024.02.00, Room 2.6.1 + KSP,
   Coroutines 1.7.1.
-- APK renamed to `FocusWall-debug-v1.0.apk` (legacy `applicationVariants` block).
+- APK renamed to `NullFlow-debug-v1.0.apk` (legacy `applicationVariants` block).
 - Manifest: `VIBRATE`, `FOREGROUND_SERVICE`, `QUERY_ALL_PACKAGES`.
 - Service: `.vpn.FocusVpnService` with `BIND_VPN_SERVICE` permission +
   `android.net.VpnService` intent-filter.
@@ -94,7 +116,7 @@
 
 ### Phase 5 — Build & Run
 - `./gradlew assembleDebug --no-daemon`
-- Output: `app/build/outputs/apk/debug/FocusWall-debug-v1.0.apk`
+- Output: `app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`
 
 ---
 
