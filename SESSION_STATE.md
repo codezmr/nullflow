@@ -15,7 +15,37 @@
 
 ---
 
-## ✅ Current Status: BUILT — `NullFlow.apk` (23 MB) ready for device test
+## ✅ Current Status: BUILT WITH LOGGING — debugging the ON/OFF crash
+
+**Built 2026-09-03 (commit `57e0ddb`):** `NullFlow.apk` (23 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+**NEW: crash-proof logging (this build):**
+- `AppLog.kt` — writes to PUBLIC `Download/NullFlow/nullflow.log` (MediaStore,
+  no permission) with fallback to app-private dir. Also streams to logcat
+  tag `NullFlow`. Rotates at 2000 lines.
+- **Crash handler** in `MainActivity` (installed BEFORE `super.onCreate`)
+  catches uncaught exceptions from any thread → writes full stack trace to the
+  log file BEFORE the process dies.
+- Logging added to: MainActivity lifecycle, toggle ON/OFF flow, startShield/
+  stopShield/endCurrentSession, FocusVpnService (onCreate/onStartCommand/
+  startShield/establish/startForeground/onDestroy/onRevoke), AppPicker
+  (load + block/unblock).
+
+**KNOWN BUG (user report, 2026-09-03):** app CRASHES when turning shield ON
+(and again on OFF). No notification / VPN icon appears. After crash + reopen,
+UI shows "already ON" (stale Room state: active profile + running session were
+inserted before the crash). **The log file will show the exact exception.**
+
+**Next:** Zamir installs, reproduces the crash, shares
+`Download/NullFlow/nullflow.log` → analyze → fix.
+Suspects to check in the log: `establish()` failure, `startForeground`
+timeout (5s), `readBlockedPackages` (runBlocking on main thread), or
+`startForegroundService` from a dead activity.
+
+---
+
+## ✅ Previous Status: BUILT — `NullFlow.apk` (23 MB) ready for device test
 
 **Built 2026-09-03:** `BUILD SUCCESSFUL`, APK 23 MB at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
