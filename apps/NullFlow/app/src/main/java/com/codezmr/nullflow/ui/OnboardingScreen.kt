@@ -209,7 +209,33 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 }
             )
 
-            Spacer(Modifier.height(44.dp))
+            Spacer(Modifier.height(28.dp))
+
+            // ---- Footer (quiet, professional — not highlighted) ----
+            val versionName = remember {
+                try {
+                    context.packageManager
+                        .getPackageInfo(context.packageName, 0).versionName
+                } catch (_: Exception) {
+                    "1.0"
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Codezmr",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = StarkWhite.copy(alpha = 0.35f)
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = "v$versionName · © ${java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)} Codezmr. All rights reserved.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = StarkWhite.copy(alpha = 0.22f)
+                )
+            }
+
+            Spacer(Modifier.height(30.dp))
         }
     }
 }
