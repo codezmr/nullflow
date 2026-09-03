@@ -1,0 +1,129 @@
+# FocusWall — Session State
+
+> **Read this first to resume.** Last updated: 2026-09-03.
+> Goal: per-app internet kill-switch ("selective Offline Switch") via a local
+> VPN blackhole. Premium UI: hero toggle + haptics + bottom sheets.
+>
+> ⚠️ **HARD RULE: NEVER build the APK without asking Zamir first.**
+> Discuss + finish all code changes, THEN ask "build or not?". Wait for the go-ahead.
+>
+> 🔒 **GIT IS LOCAL-ONLY — NO REMOTE, EVER.** `git init` + `git commit` only.
+> NEVER run `git remote add`, `git push`, or any network/git-cloud command.
+
+---
+
+## ✅ Current Status: SCAFFOLDING STARTED — awaiting code
+
+**Done so far:**
+- Local git repo initialized (no remote, ever).
+- `doc/APP_IDEA.md` — full app idea + 5-phase architecture (read-only reference).
+- Gradle wrapper copied from SnapTriage (Gradle 8.7, cached).
+- `local.properties` → `sdk.dir=/home/mohmmad/Android/Sdk`.
+- Directory skeleton: `apps/FocusWall/app/src/main/java/com/focuswall/app/{data,ui,vpn}`.
+
+**Next (in order):**
+1. Phase 1: root + app `build.gradle.kts`, `settings.gradle.kts`,
+   `gradle.properties`, `AndroidManifest.xml` (VIBRATE, FOREGROUND_SERVICE,
+   QUERY_ALL_PACKAGES + FocusVpnService with BIND_VPN_SERVICE).
+2. Phase 2: Room (FocusProfile / BlockedApp / FocusSession + DAOs) +
+   PackageManagerRepo.
+3. Phase 3: FocusVpnService (blackhole logic — see doc/APP_IDEA.md Phase 3,
+   CRUCIAL: use `addAllowedApplication`, NOT `addDisallowedApplication`).
+4. Phase 4: UI (hero toggle + haptics + pre-prompt sheet + app picker sheet).
+5. Phase 5: **ASK ZAMIR BEFORE BUILDING.** `./gradlew assembleDebug --no-daemon`
+   → `app/build/outputs/apk/debug/FocusWall-debug-v1.0.apk`.
+
+---
+
+## 📁 Project Layout (target)
+
+```
+3Sep2026_app_freez/
+├── SESSION_STATE.md          ← this file
+├── doc/APP_IDEA.md           ← idea + architecture (read-only reference)
+└── apps/FocusWall/
+    ├── build.gradle.kts      ← AGP 8.5.2, Kotlin 1.9.22
+    ├── settings.gradle.kts
+    ├── gradle.properties
+    ├── local.properties      ← sdk.dir=/home/mohmmad/Android/Sdk
+    ├── gradlew + gradle/wrapper/  ← Gradle 8.7 (COPIED from SnapTriage — do NOT change)
+    └── app/
+        ├── build.gradle.kts  ← compileSdk 34, minSdk 30, compose, Room+KSP, coroutines
+        └── src/main/
+            ├── AndroidManifest.xml
+            ├── java/com/focuswall/app/
+            │   ├── MainActivity.kt
+            │   ├── data/       ← Room DB, entities, DAOs, PackageManagerRepo
+            │   ├── ui/         ← Compose screens (hero toggle, sheets, theme)
+            │   └── vpn/        ← FocusVpnService
+            └── res/
+```
+
+---
+
+## 🧱 Tech Stack (LOCKED — see ../../ANDROID_BUILD_SETUP.md for why)
+
+| Component | Version |
+|---|---|
+| Gradle | **8.7** (cached; VPN blocks newer downloads) |
+| AGP | **8.5.2** |
+| Kotlin | **1.9.22** |
+| Compose Compiler | **1.5.8** (must match Kotlin) |
+| Compose BOM | **2024.02.00** |
+| Room | **2.6.1** + KSP **1.9.22-1.0.17** (both cached) |
+| Coroutines | **1.7.1** (cached) |
+| JDK | 17 (sourceCompat/jvmTarget) |
+| SDK | `~/Android/Sdk` (android-34, android-36) |
+
+**APK rename:** `app/build.gradle.kts` has an `android.applicationVariants.all { ... outputFileName = "FocusWall-debug-v1.0.apk" }` block (legacy API — `androidComponents.outputFileName` doesn't exist in AGP 8.5.2).
+
+---
+
+## 🔑 Key Implementation Decisions
+
+1. **Blackhole VPN (CRUCIAL):** Do NOT use `addDisallowedApplication`.
+   Route ONLY blocked apps INTO the VPN dead-end:
+   - `addAddress("10.0.0.2", 32)` + `addRoute("0.0.0.0", 0)`
+   - `addAllowedApplication(pkg)` for each blocked package
+   - `setBlocking(true)` → their packets are silently DROPPED
+   - All other apps bypass the VPN → keep internet.
+2. **Never say "VPN" in UI** — call it "Local Privacy Shield" / "Focus Wall".
+   Pre-prompt screen BEFORE the system consent dialog.
+3. **Haptics:** `VibrationEffect.createOneShot(50, 150)` touch-down,
+   `createOneShot(100, 255)` on successful activation.
+4. **Visual state:** `animateColorAsState` background → deep dark `#121212`
+   when active ("rest mode").
+5. **App picker:** filter out system apps
+   (`(flags & ApplicationInfo.FLAG_SYSTEM) != 0`), cache labels + icons.
+6. **Foreground service:** VPN service needs a persistent notification
+   ("Focus Session Active" + timer).
+
+---
+
+## 🖥️ Build / Install / Debug
+
+- **APK:** `apps/FocusWall/app/build/outputs/apk/debug/FocusWall-debug-v1.0.apk`
+- **Build:** `cd apps/FocusWall && ./gradlew assembleDebug --no-daemon`
+- **Install:** `adb install -r apps/FocusWall/app/build/outputs/apk/debug/FocusWall-debug-v1.0.apk`
+- **Logcat:** `adb logcat -s FocusWall`
+
+---
+
+## ⚠️ Known / Watch-out
+
+- **Git: LOCAL-ONLY.** NO remote — never add one, never push. Commit locally
+  before big changes.
+- **VPN-gated:** `services.gradle.org` is dead over this VPN. Never bump the
+  Gradle wrapper version.
+- **Compose Compiler must match Kotlin** (1.9.22 → 1.5.8).
+- **Compose BOM 2024.02.00 gotchas** (from SnapTriage):
+  - `Modifier.shadow` needs `import androidx.compose.ui.draw.shadow` AND uses
+    `elevation: Dp` (not `radius`).
+  - `slideInVertically`/`slideOutVertically` don't take `targetOffsetY`/
+    `initialOffsetY` lambda params — use `animationSpec` only.
+  - `align` is a `BoxScope`/`RowScope`/`ColumnScope` member — do NOT import
+    `androidx.compose.foundation.layout.align`.
+- **QUERY_ALL_PACKAGES** is a Play Store scrutiny item — fine for sideloaded
+  APK; would need justification for Play release.
+- **VpnService.prepare()** returns null if already authorized — handle both
+  cases in the consent flow.
