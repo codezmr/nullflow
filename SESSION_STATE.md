@@ -15,10 +15,43 @@
 
 ---
 
-## ✅ Current Status: BUILT — crash FIXED + welcome screen + rotating tips
+## ✅ Current Status: BUILT — profile loop FIXED + Done bar in picker
 
-**Built 2026-09-03 (commit `c47f867`):** `NullFlow.apk` (23 MB) at
+**Built 2026-09-03 (commit `79bc450`):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### 🐛 BUG FIXED: profile-creation loop (confirmed from log)
+Symptom: every toggle ON created a NEW empty profile (1→2→3→4→5→6→7) and
+showed "0 apps", re-opening the picker in an endless loop.
+Root cause: `activeProfile` was always null (a profile is only "active" once
+explicitly marked), so `onToggle` fell through to `createDefaultProfile()` on
+every tap.
+**Fixes:**
+- **`effectiveProfile`** (`MainScreen`): the profile the UI points at =
+  `activeProfile ?: profiles.firstOrNull()`. The profile row, blocked-app
+  count, and toggle all use it → no more duplicate profiles.
+- **Mark profile active on block** (`AppPickerSheet.toggleApp`): when an app is
+  checked, `clearActive()` + `setActive(profileId, true)` so the toggle finds it.
+- **Toggle** now resolves `effectiveProfile?.id ?: createDefaultProfile(dao)`.
+
+### 🆕 UX: "Done" bar in the app picker
+The picker had NO way to confirm (only swipe-down). Added a full-width
+**"Done · N apps selected"** button at the bottom (closes the sheet, haptic).
+Header still shows live "N selected".
+
+### ⚠️ Still to verify on device
+- Pick apps → tap **Done** → profile row shows "N apps shielded".
+- Toggle ON → shield engages (VPN icon + notification), no new profile minted.
+- Toggle OFF → clean stop.
+
+**Next:** Zamir installs `79bc450`, tests the full flow (pick → Done → ON →
+OFF). Share `Download/NullFlow/nullflow.log` if anything misbehaves.
+
+---
+
+## ✅ Previous Status: BUILT — crash FIXED + welcome screen + rotating tips
+
+**Built 2026-09-03 (commit `c47f867`):** `NullFlow.apk` (23 MB).
 
 ### 🐛 CRASH FIXED (root cause confirmed from log)
 The ON/OFF crash was **`ForegroundServiceDidNotStartInTimeException`**.
