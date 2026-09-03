@@ -15,10 +15,41 @@
 
 ---
 
-## ✅ Current Status: BUILT — back dialog + welcome polish + sticky-restart fix
+## ✅ Current Status: BUILT — welcome screen redesigned (scrollable + premium)
 
-**Built 2026-09-03 (commit `1149f21`):** `NullFlow.apk` (23 MB) at
+**Built 2026-09-03 (commit `3051837`):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### 🆕 Welcome screen: scrollable + premium redesign
+User feedback: "not scrollable" + "looks like text text only, make it premium".
+**Changes (`OnboardingScreen.kt`):**
+- **Scrollable**: content now in a `verticalScroll(rememberScrollState())` Column
+  (was a fixed Column with `Spacer(weight(1f))` that couldn't scroll).
+- **Ambient glow background**: two soft radial gradients (electric-blue top-left,
+  neon-cyan bottom-right) for premium depth (`AmbientGlow`).
+- **Privacy pill**: the "0 bytes" line is now a rounded badge with a 🔒 icon
+  (was bare centered text).
+- **Feature cards**: the 3 "how it works" rows are now rich neumorphic cards
+  (`FeatureCard`) with an icon chip (48dp rounded square) + title + description
+  (was bare `FeatureRow` text lines — removed).
+- **Section labels**: uppercase eyebrow labels ("HOW IT WORKS", "ONE-TIME SETUP")
+  via `SectionLabel`.
+- (Carried) Breathing hero, rotating tip card, hidden granted perms, gatekeeper
+  button, brand footer.
+
+### ⚠️ Still to verify on device
+- Welcome screen scrolls smoothly on small screens.
+- Premium look: glow + cards + pill render correctly (no clipping).
+- (Carried from `1149f21`) OFF cleanup, back dialog, tip card.
+
+**Next:** Zamir installs `3051837`, checks the welcome screen look + scroll.
+Share `Download/NullFlow/nullflow.log` if anything misbehaves.
+
+---
+
+## ✅ Previous Status: BUILT — back dialog + welcome polish + sticky-restart fix
+
+**Built 2026-09-03 (commit `1149f21`):** `NullFlow.apk` (23 MB).
 
 ### 🐛 BUG FIXED: VPN icon/notification lingered after OFF (sticky restart)
 Root cause (from log): `onStartCommand` returned **`START_STICKY`** for the
