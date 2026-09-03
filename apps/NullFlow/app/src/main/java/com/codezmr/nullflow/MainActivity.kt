@@ -4,6 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +57,57 @@ class MainActivity : ComponentActivity() {
                 // permission checklist is already checked, so it's a single
                 // "Enter NullFlow" tap. (A fresh install still walks the setup.)
                 var showOnboarding by remember { mutableStateOf(true) }
+
+                // ---- Back-confirmation: pressing back (button or gesture) shows
+                // a dialog instead of immediately minimizing the app. ----
+                var showExitDialog by remember { mutableStateOf(false) }
+                // Wire the system back handler (button + gesture) to our dialog.
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    onBackPressedDispatcher.addCallback(
+                        this@MainActivity,
+                        object : androidx.activity.OnBackPressedCallback(true) {
+                            override fun handleOnBackPressed() {
+                                AppLog.d("back pressed → showing exit confirmation")
+                                showExitDialog = true
+                            }
+                        }
+                    )
+                }
+
+                if (showExitDialog) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            AppLog.d("exit dialog dismissed (stay)")
+                            showExitDialog = false
+                        },
+                        title = {
+                            Text("Leave NullFlow?")
+                        },
+                        text = {
+                            Text("Your shield keeps running in the background. You can come back anytime.")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                AppLog.d("exit confirmed → minimizing app")
+                                showExitDialog = false
+                                moveTaskToBack(true)
+                            }) {
+                                Text("Minimize")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                AppLog.d("exit cancelled → stay")
+                                showExitDialog = false
+                            }) {
+                                Text("Stay")
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        textContentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
                 if (showOnboarding) {
                     OnboardingScreen(onEnter = {

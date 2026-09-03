@@ -76,7 +76,7 @@ class FocusVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        AppLog.d("FocusVpnService.onStartCommand action=$action startId=$startId")
+        AppLog.d("FocusVpnService.onStartCommand action=$action startId=$startId intent=${intent != null}")
         when (action) {
             ACTION_STOP -> {
                 AppLog.d("ACTION_STOP received → stopping service (startId=$startId)")
@@ -90,9 +90,19 @@ class FocusVpnService : VpnService() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            else -> startShield(intent?.getLongExtra(EXTRA_PROFILE_ID, -1L) ?: -1L)
+            // A NULL intent means the system is re-delivering after the process
+            // died (sticky restart). We must NOT re-establish the tunnel in that
+            // case — that's what kept bringing the VPN icon back after OFF.
+            null -> {
+                AppLog.w("onStartCommand with NULL intent (system re-delivery) — NOT re-establishing shield")
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            else -> startShield(intent.getLongExtra(EXTRA_PROFILE_ID, -1L))
         }
-        return START_STICKY
+        // START_NOT_STICKY: if the system kills us, do NOT auto-restart the
+        // shield. The user must explicitly toggle it back on.
+        return START_NOT_STICKY
     }
 
     /**
@@ -217,7 +227,7 @@ class FocusVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        return Notification.Builder(this, CHANNEL_ID)
+        val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.vpn_service_label))
             .setContentText("$timer · ${getString(R.string.vpn_service_text)}")
@@ -227,6 +237,8 @@ class FocusVpnService : VpnService() {
             .setCategory(Notification.CATEGORY_SERVICE)
             .addAction(0, "End session", stopIntent)
             .build()
+        AppLog.d("buildNotification: title='${getString(R.string.vpn_service_label)}' text='$timer · ${getString(R.string.vpn_service_text)}' ongoing=true")
+        return notification
     }
 
     /** Refresh the notification timer every 30s while active. */
@@ -247,9 +259,10 @@ class FocusVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        AppLog.d("FocusVpnService.onDestroy — Shield OFF, releasing tunnel")
+        AppLog.d("FocusVpnService.onDestroy — Shield OFF, releasing tunnel (fd=${interfaceFd != null}, wasRunning=$isShieldRunning)")
         try {
             interfaceFd?.close()
+            AppLog.d("  tunnel fd closed")
         } catch (e: Exception) {
             AppLog.e("closing VPN fd failed", e)
         }
@@ -261,6 +274,7 @@ class FocusVpnService : VpnService() {
         // VPN icon linger after the shield is turned off.
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
+            AppLog.d("  stopForeground(REMOVE) called")
         } catch (e: Exception) {
             AppLog.e("stopForeground failed", e)
         }
@@ -269,9 +283,11 @@ class FocusVpnService : VpnService() {
         try {
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                 .cancel(NOTIF_ID)
+            AppLog.d("  notification $NOTIF_ID cancelled")
         } catch (e: Exception) {
             AppLog.e("cancel notification failed", e)
         }
+        AppLog.d("FocusVpnService.onDestroy COMPLETE — isShieldRunning=false")
         super.onDestroy()
     }
 

@@ -205,40 +205,81 @@ fun OnboardingScreen(onEnter: () -> Unit) {
 
             Spacer(Modifier.height(28.dp))
 
-            // ---- Tactile permission checklist ----
-            NeumorphicChecklistItem(
-                title = "Notifications",
-                description = "Shows your focus timer and keeps the shield running.",
-                isChecked = hasNotificationPerm,
-                onClick = {
-                    if (!hasNotificationPerm) {
-                        Haptics.tick(context)
-                        if (Build.VERSION.SDK_INT >= 33) {
-                            notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            hasNotificationPerm = true
-                        }
-                    }
-                }
+            // ---- How it works (3 quiet feature rows) ----
+            FeatureRow(
+                icon = "◉",
+                title = "Pick the apps to silence",
+                desc = "Choose any apps. They go dark — everything else stays connected."
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
+            FeatureRow(
+                icon = "⬤",
+                title = "One tap, zero popups",
+                desc = "Flip the switch. The shield engages instantly, right on this phone."
+            )
+            Spacer(Modifier.height(10.dp))
+            FeatureRow(
+                icon = "✦",
+                title = "Your data never moves",
+                desc = "No servers, no accounts, no tracking. It all stays on your device."
+            )
 
-            NeumorphicChecklistItem(
-                title = "Local Shield",
-                description = "Safely drops network for blocked apps. Nothing else.",
-                isChecked = hasVpnPerm,
-                onClick = {
-                    if (!hasVpnPerm) {
-                        Haptics.tick(context)
-                        val intent = VpnService.prepare(context)
-                        if (intent != null) {
-                            vpnLauncher.launch(intent)
-                        } else {
-                            hasVpnPerm = true
+            Spacer(Modifier.height(28.dp))
+
+            // ---- Permission checklist (ONLY show what's still needed) ----
+            // If a permission is already granted, we hide its row entirely so
+            // returning users see a clean, fast screen.
+            val needsNotif = !hasNotificationPerm
+            val needsVpn = !hasVpnPerm
+
+            if (needsNotif || needsVpn) {
+                Text(
+                    text = "One-time setup",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = IcyBlue,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            if (needsNotif) {
+                NeumorphicChecklistItem(
+                    title = "Notifications",
+                    description = "Shows your focus timer and keeps the shield running.",
+                    isChecked = hasNotificationPerm,
+                    onClick = {
+                        if (!hasNotificationPerm) {
+                            Haptics.tick(context)
+                            if (Build.VERSION.SDK_INT >= 33) {
+                                notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                hasNotificationPerm = true
+                            }
                         }
                     }
-                }
-            )
+                )
+                if (needsVpn) Spacer(Modifier.height(16.dp))
+            }
+
+            if (needsVpn) {
+                NeumorphicChecklistItem(
+                    title = "Local Shield",
+                    description = "Safely drops network for blocked apps. Nothing else.",
+                    isChecked = hasVpnPerm,
+                    onClick = {
+                        if (!hasVpnPerm) {
+                            Haptics.tick(context)
+                            val intent = VpnService.prepare(context)
+                            if (intent != null) {
+                                vpnLauncher.launch(intent)
+                            } else {
+                                hasVpnPerm = true
+                            }
+                        }
+                    }
+                )
+            }
 
             Spacer(Modifier.weight(1f))
 
@@ -507,6 +548,43 @@ private fun TipCard() {
             style = MaterialTheme.typography.bodyMedium,
             color = IcyBlue.copy(alpha = 0.5f)
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Feature row — a quiet "how it works" line (icon + title + description)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun FeatureRow(icon: String, title: String, desc: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = icon,
+            style = MaterialTheme.typography.bodyLarge,
+            color = IcyBlue,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = StarkWhite.copy(alpha = 0.9f)
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = StarkWhite.copy(alpha = 0.5f),
+                lineHeight = 16.sp
+            )
+        }
     }
 }
 
