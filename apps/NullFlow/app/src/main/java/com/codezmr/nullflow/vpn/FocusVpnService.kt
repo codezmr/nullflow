@@ -79,7 +79,14 @@ class FocusVpnService : VpnService() {
         AppLog.d("FocusVpnService.onStartCommand action=$action startId=$startId")
         when (action) {
             ACTION_STOP -> {
-                AppLog.d("ACTION_STOP received → stopping service")
+                AppLog.d("ACTION_STOP received → stopping service (startId=$startId)")
+                // Drop the foreground notification + VPN icon immediately, then
+                // tear the service down. (onDestroy also does this as a safety
+                // net, but doing it here makes the UI update instantly.)
+                try {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } catch (_: Exception) {
+                }
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -201,8 +208,11 @@ class FocusVpnService : VpnService() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        // Distinct request code (2) so this never coalesces with the toggle's
+        // stop intent (request code 1) — that coalescing is why "End session"
+        // from the notification sometimes did nothing.
         val stopIntent = PendingIntent.getService(
-            this, 1,
+            this, 2,
             Intent(this, FocusVpnService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -246,6 +256,22 @@ class FocusVpnService : VpnService() {
         interfaceFd = null
         isShieldRunning = false
         serviceScope.cancel()
+        // CRITICAL: remove the foreground notification + VPN status-bar icon.
+        // Without this the "Local Privacy Shield is active" notification and the
+        // VPN icon linger after the shield is turned off.
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            AppLog.e("stopForeground failed", e)
+        }
+        // Belt-and-suspenders: also explicitly cancel the notification in case
+        // stopForeground didn't clear it on this device/OS version.
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(NOTIF_ID)
+        } catch (e: Exception) {
+            AppLog.e("cancel notification failed", e)
+        }
         super.onDestroy()
     }
 

@@ -15,10 +15,46 @@
 
 ---
 
-## ✅ Current Status: BUILT — profile loop FIXED + Done bar in picker
+## ✅ Current Status: BUILT — core flow WORKS + stale-state reconcile
 
-**Built 2026-09-03 (commit `79bc450`):** `NullFlow.apk` (23 MB) at
+**Built 2026-09-03 (commit `939480c`):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### ✅ CORE FLOW CONFIRMED WORKING (from device log)
+Pick apps → Done → toggle ON → **Shield ACTIVE — 2 apps blackholed** (no crash,
+no profile loop). Toggle OFF → clean stop. The crash fix + profile fix both hold.
+
+### 🐛 BUG FIXED: stale "ON" state after app kill/restart
+Symptom: app killed while shield ON → on restart, UI showed `isActive=true`
+(`runningSession=true`) even though the service was dead → toggle stuck.
+Root cause: Room session + active profile survived the process death, but the
+VPN service did not.
+**Fix:**
+- `FocusVpnService.isShieldRunning` (static `@Volatile`, private set) — true only
+  while the tunnel is live in a running process; set true on establish, false in
+  `onDestroy`. Resets to false on every fresh process start.
+- `MainActivity.onCreate`: if `!isShieldRunning` and a running session exists in
+  Room → end it + deactivate the profile (reconcile). Logged as "Reconciled
+  stale session".
+- Cosmetic: Done-button log now prints the count, not the raw list.
+
+### ⚠️ Known (harmless): repeated ACTION_STOP
+Log shows multiple STOP intents for an already-stopped service (notification
+"End session" + toggle). `stopSelf()` is idempotent/safe, so no action needed
+unless it becomes noisy.
+
+### ⚠️ Still to verify on device
+- Kill app while shield ON → reopen → toggle should read OFF (reconciled).
+- Full cycle: pick → Done → ON (VPN icon + notif) → kill app → reopen → OFF.
+
+**Next:** Zamir installs `939480c`, tests the kill/restart reconcile. Share
+`Download/NullFlow/nullflow.log` if anything misbehaves.
+
+---
+
+## ✅ Previous Status: BUILT — profile loop FIXED + Done bar in picker
+
+**Built 2026-09-03 (commit `79bc450`):** `NullFlow.apk` (23 MB).
 
 ### 🐛 BUG FIXED: profile-creation loop (confirmed from log)
 Symptom: every toggle ON created a NEW empty profile (1→2→3→4→5→6→7) and
