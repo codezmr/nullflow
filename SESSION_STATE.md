@@ -15,7 +15,32 @@
 
 ---
 
-## ✅ Current Status: ALL CODE DONE (Phases 1-4 + Onboarding) — AWAITING BUILD PERMISSION
+## ✅ Current Status: BUILT — `NullFlow.apk` (23 MB) ready for device test
+
+**Built 2026-09-03:** `BUILD SUCCESSFUL`, APK 23 MB at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+Manifest verified: package `com.codezmr.nullflow`, label "NullFlow",
+permissions VIBRATE / POST_NOTIFICATIONS / FOREGROUND_SERVICE(+_DATA_SYNC) /
+QUERY_ALL_PACKAGES. Working tree CLEAN (commit `c88c0fc`).
+
+> ⚠️ **Compose 1.6.1 (BOM 2024.02.00) gotchas hit this build:**
+> - `Modifier.shadow` uses `elevation: Dp` — NO `radius`, NO `ambientColor`/`spotColor` params.
+> - `infiniteTransition.animateFloat` does NOT exist → use `Animatable` +
+>   `LaunchedEffect` ping-pong loop (`animateTo(1f)` / `animateTo(0f)` in `while(true)`).
+> - `Canvas` drawscope has NO `strokeWidth` property → use `N.dp.toPx()`.
+> - `animateColorAsState` lives in `androidx.compose.animation` (NOT `.core`).
+> - KSP 1.9.22-1.0.17 chokes on multi-line `if { } else { }` blocks inside
+>   `mutableStateOf(...)` ("Expecting an element") → use `||`/`&&` expressions.
+> - `Modifier.fillMaxSize().background(x)` on one line → "Overload resolution
+>   ambiguity" → split onto separate lines.
+
+**Next:** Device test — (1) onboarding: breathing hero, both checklist rows →
+neon checks, gatekeeper → Enter; (2) main: 1-tap toggle ON (no popups), bg dims,
+WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
+
+---
+
+## ✅ Previous Status: ALL CODE DONE (Phases 1-4 + Onboarding) — AWAITING BUILD PERMISSION
 
 **Done so far:**
 - Local git repo initialized (no remote, ever).
