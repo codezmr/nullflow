@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -41,6 +43,7 @@ import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusProfile
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
@@ -66,6 +69,14 @@ fun MainScreen(
     val runningSession by dao.observeRunningSession().collectAsState(initial = null)
     val totalMs by dao.observeTotalFocusedMs().collectAsState(initial = 0L)
     val completedCount by dao.observeCompletedCount().collectAsState(initial = 0)
+
+    // Live count of blocked apps for the active profile (drives the "add apps"
+    // guard + the "N apps shielded" stat).
+    val blockedApps by remember(activeProfile?.id) {
+        val id = activeProfile?.id
+        if (id != null) dao.observeBlockedApps(id) else flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+    val blockedCount = blockedApps.size
 
     val isActive = activeProfile != null && runningSession != null
 
@@ -103,7 +114,17 @@ fun MainScreen(
             // VpnService.prepare() was already answered during onboarding,
             // so the tunnel establishes immediately.
             val profileId = current?.id ?: createDefaultProfile(dao)
-            AppLog.d("TOGGLE → turning ON for profileId=$profileId")
+
+            // Guard: nothing to shield → don't start the service (it would
+            // immediately stop), and tell the user to add apps first.
+            if (blockedCount == 0) {
+                AppLog.w("TOGGLE → blocked, 0 apps in profile. Opening picker.")
+                Haptics.tick(context)
+                onOpenPicker(profileId)
+                return
+            }
+
+            AppLog.d("TOGGLE → turning ON for profileId=$profileId ($blockedCount apps)")
             startShield(context, dao, profileId)
             Haptics.engage(context)
         }
@@ -173,6 +194,17 @@ fun MainScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
+                        text = if (blockedCount > 0)
+                            "$blockedCount app${if (blockedCount == 1) "" else "s"} shielded"
+                        else "No apps yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (blockedCount > 0)
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
                         text = "Edit apps",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
@@ -181,10 +213,30 @@ fun MainScreen(
             } else {
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    text = "No focus mode yet — tap the switch to begin",
+                    text = "No focus mode yet",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                 )
+                Spacer(Modifier.height(12.dp))
+                // Fresh install: give a clear way to pick apps BEFORE toggling on.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable {
+                            val profileId = createDefaultProfile(dao)
+                            onOpenPicker(profileId)
+                        }
+                        .padding(horizontal = 18.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = "Choose apps to shield",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             Spacer(Modifier.weight(1f))

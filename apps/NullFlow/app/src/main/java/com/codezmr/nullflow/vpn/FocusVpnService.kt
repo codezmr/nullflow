@@ -78,8 +78,26 @@ class FocusVpnService : VpnService() {
         return START_STICKY
     }
 
-    /** Build the blackhole tunnel and go foreground. */
+    /**
+     * Build the blackhole tunnel and go foreground.
+     *
+     * CRITICAL: startForeground() MUST be called within 5 seconds of
+     * startForegroundService() or Android kills the app with
+     * ForegroundServiceDidNotStartInTimeException. So we go foreground
+     * IMMEDIATELY (before reading packages / establishing the tunnel),
+     * then decide whether to stay active or stop.
+     */
     private fun startShield(profileId: Long) {
+        // 1) Go foreground FIRST — satisfies the 5s contract no matter what.
+        sessionStartedAt = System.currentTimeMillis()
+        try {
+            startForeground(NOTIF_ID, buildNotification())
+            AppLog.d("startForeground OK — notification posted (before tunnel)")
+        } catch (e: Exception) {
+            AppLog.e("startForeground FAILED (notification may not show)", e)
+        }
+
+        // 2) Now read the blocked apps.
         AppLog.d("startShield: reading blocked packages for profileId=$profileId")
         val packages = try {
             readBlockedPackages(profileId)
@@ -97,6 +115,7 @@ class FocusVpnService : VpnService() {
             return
         }
 
+        // 3) Build + establish the blackhole tunnel.
         val builder = Builder()
         builder.setSession("NullFlow")
         builder.addAddress("10.0.0.2", 32)
@@ -121,13 +140,6 @@ class FocusVpnService : VpnService() {
         }
 
         interfaceFd = fd
-        sessionStartedAt = System.currentTimeMillis()
-        try {
-            startForeground(NOTIF_ID, buildNotification())
-            AppLog.d("startForeground OK — notification posted")
-        } catch (e: Exception) {
-            AppLog.e("startForeground FAILED (notification may not show)", e)
-        }
         startTimerUpdates()
         AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
     }

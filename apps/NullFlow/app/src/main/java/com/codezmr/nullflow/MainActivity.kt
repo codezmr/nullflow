@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.codezmr.nullflow.data.FocusDatabase
-import com.codezmr.nullflow.data.Settings
 import com.codezmr.nullflow.ui.AppPickerSheet
 import com.codezmr.nullflow.ui.MainScreen
 import com.codezmr.nullflow.ui.NullFlowTheme
@@ -30,10 +29,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NullFlowTheme {
-                // Onboarding gate: show the welcome/permission screen on first launch.
-                var showOnboarding by remember {
-                    mutableStateOf(!Settings.get(this).hasOnboarded)
-                }
+                // Welcome screen shows on EVERY app open. For returning users the
+                // permission checklist is already checked, so it's a single
+                // "Enter NullFlow" tap. (A fresh install still walks the setup.)
+                var showOnboarding by remember { mutableStateOf(true) }
 
                 if (showOnboarding) {
                     OnboardingScreen(onEnter = {

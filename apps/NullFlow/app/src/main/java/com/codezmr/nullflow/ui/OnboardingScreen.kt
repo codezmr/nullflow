@@ -35,9 +35,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -53,6 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.R
 import com.codezmr.nullflow.data.Settings
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // ---- Neumorphic palette (pure dark + icy blue LED) ----
 private val PureBlack = Color(0xFF0A0A0C)
@@ -62,6 +66,42 @@ private val ElectricBlue = Color(0xFF2979FF)
 private val NeonCyan = Color(0xFF00E5FF)
 private val MutedGrey = Color(0xFF3A3A42)
 private val StarkWhite = Color(0xFFF2F4F8)
+
+// ---- 30 short lines: tips, tricks & motivation (rotates randomly) ----
+private val TIPS: List<Tip> = listOf(
+    Tip("TIP", "Block your most-used app first — that's the real test."),
+    Tip("TIP", "One app at a time. Silence is a feature."),
+    Tip("TIP", "Turn the shield on before you open the app, not after."),
+    Tip("TIP", "A blocked app can't send you a notification. That's the point."),
+    Tip("TIP", "Keep your shield list short. 3 apps beat 15."),
+    Tip("TIP", "If it feels uncomfortable, it's working."),
+    Tip("TIP", "Charge your phone across the room. Distance is a shield too."),
+    Tip("TIP", "Name your focus mode after the thing you're actually doing."),
+    Tip("TIP", "Do the hardest task first, while the noise is still muted."),
+    Tip("TIP", "A single 'do not disturb' session beats ten scattered ones."),
+    Tip("TRICK", "You don't lose the internet. You reclaim your attention."),
+    Tip("TRICK", "The shield drops packets locally — 0 bytes ever leave this phone."),
+    Tip("TRICK", "Other apps keep working normally. Only the blocked ones go quiet."),
+    Tip("TRICK", "Flip it off the instant the session ends. No guilt, no lag."),
+    Tip("TRICK", "Use the timer in the notification to pace your breaks."),
+    Tip("TRICK", "Block the app, not the tab. The whole app goes dark."),
+    Tip("TRICK", "Your stats are the proof — watch the focused minutes add up."),
+    Tip("TRICK", "A 25-minute block is a full deep-work sprint. That's enough."),
+    Tip("TRICK", "The 'End session' button in the notification is your exit."),
+    Tip("TRICK", "Re-open the app anytime — your list is saved on this phone."),
+    Tip("MOTIVATE", "25 minutes of deep work beats 3 hours of distracted scrolling."),
+    Tip("MOTIVATE", "You are not behind. You are choosing where to go next."),
+    Tip("MOTIVATE", "Attention is the rarest currency. Spend it on purpose."),
+    Tip("MOTIVATE", "The feed will still be there. Your focus won't wait."),
+    Tip("MOTIVATE", "Small silences, repeated, become a calmer mind."),
+    Tip("MOTIVATE", "You don't need more time. You need less interruption."),
+    Tip("MOTIVATE", "Every session you finish is a vote for the person you're becoming."),
+    Tip("MOTIVATE", "Quiet isn't empty. It's where the good work happens."),
+    Tip("MOTIVATE", "Protect the next hour like it matters — because it does."),
+    Tip("MOTIVATE", "You've got this. One focused session at a time.")
+)
+
+private data class Tip(val tag: String, val text: String)
 
 /**
  * First-launch onboarding — premium security + serene control.
@@ -158,7 +198,12 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 textAlign = TextAlign.Center
             )
 
-            Spacer(Modifier.height(44.dp))
+            Spacer(Modifier.height(28.dp))
+
+            // ---- Rotating tip / trick / motivation (auto + tap to swap) ----
+            TipCard()
+
+            Spacer(Modifier.height(28.dp))
 
             // ---- Tactile permission checklist ----
             NeumorphicChecklistItem(
@@ -368,6 +413,100 @@ private fun BreathingHero() {
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tip card — auto-rotates (fade every 6s) AND manual (tap to advance).
+// The tag cycles TIP → TRICK → MOTIVATE → TIP ...
+// ---------------------------------------------------------------------------
+
+private val TAG_ORDER = listOf("TIP", "TRICK", "MOTIVATE")
+
+@Composable
+private fun TipCard() {
+    val scope = rememberCoroutineScope()
+
+    // Current tag index + the tip shown for that tag.
+    var tagIndex by remember { mutableStateOf(0) }
+    var tip by remember { mutableStateOf(TIPS.first { it.tag == TAG_ORDER[0] }) }
+    // Fade for the swap animation (driven imperatively).
+    val alpha = remember { Animatable(1f) }
+
+    // Advances to the next tag (cycling) and picks a fresh random tip for it.
+    fun advance() {
+        tagIndex = (tagIndex + 1) % TAG_ORDER.size
+        val nextTag = TAG_ORDER[tagIndex]
+        tip = TIPS.filter { it.tag == nextTag }.random()
+    }
+
+    // Fades out, swaps, fades back in.
+    fun swap() {
+        scope.launch {
+            alpha.animateTo(0f, tween(180))
+            advance()
+            alpha.animateTo(1f, tween(260))
+        }
+    }
+
+    // AUTO swap every 6 seconds.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(6000)
+            swap()
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .shadow(elevation = 6.dp, shape = RoundedCornerShape(18.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF101014), Color(0xFF16161C))
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = IcyBlue.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .alpha(alpha.value)
+            .clickable { swap() }
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Small tag chip (rotates with the tip)
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(IcyBlue.copy(alpha = 0.14f))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = tip.tag,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = IcyBlue,
+                letterSpacing = 1.2.sp
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = tip.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = StarkWhite.copy(alpha = 0.82f),
+            lineHeight = 20.sp,
+            modifier = Modifier.weight(1f)
+        )
+        // Tiny "tap to change" affordance
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "↻",
+            style = MaterialTheme.typography.bodyMedium,
+            color = IcyBlue.copy(alpha = 0.5f)
+        )
     }
 }
 
