@@ -13,6 +13,11 @@ import com.codezmr.nullflow.ui.AppPickerSheet
 import com.codezmr.nullflow.ui.MainScreen
 import com.codezmr.nullflow.ui.NullFlowTheme
 import com.codezmr.nullflow.ui.OnboardingScreen
+import com.codezmr.nullflow.vpn.FocusVpnService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -26,6 +31,21 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val dao = FocusDatabase.get(this).focusDao()
+
+        // Reconcile stale state: if the app was killed while the shield was ON,
+        // the service died with it (isShieldRunning == false on fresh process),
+        // but Room still has a running session + active profile. Clear it so the
+        // toggle isn't stuck showing "ON".
+        if (!FocusVpnService.isShieldRunning) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                val running = dao.getRunningSession()
+                if (running != null) {
+                    dao.endSession(running.id, System.currentTimeMillis())
+                    dao.setActive(running.profileId, false)
+                    AppLog.w("Reconciled stale session ${running.id} (service not running on app start)")
+                }
+            }
+        }
 
         setContent {
             NullFlowTheme {

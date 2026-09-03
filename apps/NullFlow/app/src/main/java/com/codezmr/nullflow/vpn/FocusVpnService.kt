@@ -52,6 +52,16 @@ class FocusVpnService : VpnService() {
 
         private const val CHANNEL_ID = "focus_session"
         private const val NOTIF_ID = 42
+
+        /**
+         * True while the shield tunnel is actually established in a LIVE process.
+         * Used to reconcile stale Room state on app restart: if the app is killed
+         * while the shield is on, the service dies with it, so this resets to
+         * false on the next process start and the UI can clear the stale session.
+         */
+        @Volatile
+        var isShieldRunning: Boolean = false
+            private set
     }
 
     private var interfaceFd: ParcelFileDescriptor? = null
@@ -140,6 +150,7 @@ class FocusVpnService : VpnService() {
         }
 
         interfaceFd = fd
+        isShieldRunning = true
         startTimerUpdates()
         AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
     }
@@ -233,6 +244,7 @@ class FocusVpnService : VpnService() {
             AppLog.e("closing VPN fd failed", e)
         }
         interfaceFd = null
+        isShieldRunning = false
         serviceScope.cancel()
         super.onDestroy()
     }

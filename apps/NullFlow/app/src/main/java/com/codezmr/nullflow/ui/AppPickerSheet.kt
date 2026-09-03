@@ -180,7 +180,7 @@ fun AppPickerSheet(
                         .background(MaterialTheme.colorScheme.primary)
                         .clickable {
                             Haptics.engage(context)
-                            AppLog.d("AppPicker: DONE tapped — closing sheet ($blockedPackages.size apps)")
+                            AppLog.d("AppPicker: DONE tapped — closing sheet (${blockedPackages.size} apps)")
                             onDismiss()
                         }
                         .height(54.dp),
