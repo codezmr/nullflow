@@ -1,0 +1,97 @@
+package com.codezmr.nullflow.data
+
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** A user-installed app, ready for the picker bottom sheet. */
+data class InstalledApp(
+    val packageName: String,
+    val label: String,
+    val icon: Bitmap
+)
+
+/**
+ * Lists the user's installed apps for the picker.
+ *
+ * Filters OUT system apps (pre-installed / platform) so the sheet shows
+ * only what the user actually installed — plus a small allow-list of
+ * "target" apps (WhatsApp, Instagram, …) that are sometimes system-updated.
+ *
+ * Icons + labels are loaded once and cached in memory to prevent UI stutter
+ * while scrolling the bottom sheet.
+ */
+class PackageManagerRepo(private val context: Context) {
+
+    private val pm: PackageManager = context.packageManager
+
+    /** Apps that are worth showing even if flagged as system (common on some OEMs). */
+    private val targetPackages = setOf(
+        "com.whatsapp",
+        "com.instagram.android",
+        "com.facebook.orca",
+        "com.facebook.katana",
+        "com.snapchat.android",
+        "com.tiktok.android",
+        "com.twitter.android",
+        "com.discord",
+        "com.telegram.org",
+        "org.thunderbird",
+        "com.slack",
+        "net.devinvinci.openholo",
+        "com.zhiliaoapp.musically"
+    )
+
+    private val cache = mutableListOf<InstalledApp>()
+    private var loaded = false
+
+    /**
+     * Returns the list of user apps. Loads (and caches) on first call.
+     * Runs on [Dispatchers.IO] — call from a coroutine.
+     */
+    suspend fun getInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
+        if (!loaded) {
+            val apps = mutableListOf<InstalledApp>()
+            val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            for (info in installed) {
+                val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val isUpdatedSystem = (info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                // Keep: user-installed apps, OR known targets (even if system-flagged).
+                if (isSystem && !isUpdatedSystem && info.packageName !in targetPackages) continue
+                if (info.packageName == context.packageName) continue // skip ourselves
+                try {
+                    val label = info.loadLabel(pm).toString()
+                    val icon = loadIcon(info)
+                    apps.add(InstalledApp(info.packageName, label, icon))
+                } catch (_: Exception) {
+                    // Skip apps we can't read (rare permission edge cases).
+                }
+            }
+            apps.sortBy { it.label.lowercase() }
+            cache.clear()
+            cache.addAll(apps)
+            loaded = true
+        }
+        cache
+    }
+
+    private fun loadIcon(info: ApplicationInfo): Bitmap {
+        val drawable: Drawable = info.loadIcon(pm)
+        return if (drawable is BitmapDrawable && drawable.bitmap != null) {
+            drawable.bitmap
+        } else {
+            val size = 96
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(canvas)
+            bmp
+        }
+    }
+}

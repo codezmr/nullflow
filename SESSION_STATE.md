@@ -15,7 +15,7 @@
 
 ---
 
-## ✅ Current Status: SCAFFOLDING STARTED — awaiting code
+## ✅ Current Status: ALL CODE PHASES DONE (1-4) — AWAITING BUILD PERMISSION
 
 **Done so far:**
 - Local git repo initialized (no remote, ever).
@@ -28,16 +28,22 @@
   `AndroidManifest.xml` (VIBRATE, FOREGROUND_SERVICE + _DATA_SYNC,
   QUERY_ALL_PACKAGES + FocusVpnService with BIND_VPN_SERVICE), res/
   (strings, colors, themes, adaptive launcher icon — hand-drawn "null ring + slash").
-- Directory skeleton: `apps/NullFlow/app/src/main/java/com/codezmr/nullflow/{data,ui,vpn}`.
+- **Phase 2 COMPLETE:** Room DB (`FocusProfile`, `BlockedApp`, `FocusSession`
+  entities + `FocusDao` with CRUD + Flow emitters + `FocusDatabase`),
+  `PackageManagerRepo` (filters system apps, caches labels+icons, target allow-list).
+- **Phase 3 COMPLETE:** `FocusVpnService` (blackhole logic via `addAllowedApplication`
+  + `setBlocking(true)`, foreground notification with 30s timer, onRevoke handling).
+- **Phase 4 COMPLETE:** `NullFlowTheme` (dark, rest-mode palette), `Haptics`
+  (tick/engage/disengage), `MainScreen` (hero toggle + animateColorAsState bg +
+  live session timer + stats + pre-prompt consent sheet), `AppPickerSheet`
+  (ModalBottomSheet + LazyColumn + multi-select checkboxes), `MainActivity`
+  (edge-to-edge, wires DAO + picker sheet).
 
-**Next (in order):**
-1. Phase 2: Room (FocusProfile / BlockedApp / FocusSession + DAOs) +
-   PackageManagerRepo.
-3. Phase 3: FocusVpnService (blackhole logic — see doc/APP_IDEA.md Phase 3,
-   CRUCIAL: use `addAllowedApplication`, NOT `addDisallowedApplication`).
-4. Phase 4: UI (hero toggle + haptics + pre-prompt sheet + app picker sheet).
-5. Phase 5: **ASK ZAMIR BEFORE BUILDING.** `./gradlew assembleDebug --no-daemon`
-   → `app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`.
+**Next:**
+- **Phase 5: ASK ZAMIR BEFORE BUILDING.** `./gradlew assembleDebug --no-daemon`
+  → `app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`.
+- After build: device-test (toggle ON → consent → WhatsApp single-tick, OFF →
+  internet back, haptics, bg dim, app picker, stats).
 
 ---
 
