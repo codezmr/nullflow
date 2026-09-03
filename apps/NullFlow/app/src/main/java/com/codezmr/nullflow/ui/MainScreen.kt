@@ -1,10 +1,6 @@
 package com.codezmr.nullflow.ui
 
-import android.app.Activity
 import android.content.Intent
-import android.net.VpnService
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -23,17 +19,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,7 +36,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusProfile
@@ -55,10 +46,11 @@ import kotlinx.coroutines.launch
  * The whole app in one screen (Big Tech approach):
  *  - Hero toggle (massive, animated, haptic)
  *  - Quantified-relief stats
- *  - Profile name + "edit apps" entry point
- *  - Bottom sheets: pre-prompt consent + app picker
+ *  - Profile name + "edit apps" entry point (app picker sheet)
+ *
+ * The toggle is INSTANT: VPN consent was already handled during onboarding,
+ * so flipping it on creates the tunnel with zero popups.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     dao: FocusDao,
@@ -94,25 +86,7 @@ fun MainScreen(
         }
     }
 
-    // ---- Sheet state ----
-    var showPrePrompt by remember { mutableStateOf(false) }
-    var pendingProfileId by remember { mutableStateOf<Long?>(null) }
-
-    // ---- VPN consent launcher (the one system dialog we can't hide) ----
-    val vpnLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            // Consent granted → actually start the shield.
-            val pid = pendingProfileId
-            if (pid != null) {
-                startShield(context, dao, pid)
-            }
-        }
-        // On cancel: do nothing — toggle stays off, user can retry.
-    }
-
-    // ---- Hero toggle action ----
+    // ---- Hero toggle action (INSTANT — consent was handled in onboarding) ----
     fun onToggle() {
         Haptics.tick(context)
         val current = activeProfile
@@ -122,11 +96,12 @@ fun MainScreen(
             endCurrentSession(dao, scope)
             Haptics.disengage(context)
         } else {
-            // Turn ON.
+            // Turn ON — one tap, zero popups.
+            // VpnService.prepare() was already answered during onboarding,
+            // so the tunnel establishes immediately.
             val profileId = current?.id ?: createDefaultProfile(dao)
-            // Pre-prompt first (the "Local Privacy Shield" framing), then consent.
-            pendingProfileId = profileId
-            showPrePrompt = true
+            startShield(context, dao, profileId)
+            Haptics.engage(context)
         }
     }
 
@@ -216,25 +191,6 @@ fun MainScreen(
 
             Spacer(Modifier.height(40.dp))
         }
-
-        // ---- Pre-prompt consent sheet ----
-        if (showPrePrompt) {
-            PrePromptSheet(
-                onAllow = {
-                    showPrePrompt = false
-                    val intent = VpnService.prepare(context)
-                    if (intent != null) {
-                        vpnLauncher.launch(intent)
-                    } else {
-                        // Already authorized → start immediately.
-                        val pid = pendingProfileId
-                        if (pid != null) startShield(context, dao, pid)
-                    }
-                },
-                onDismiss = { showPrePrompt = false }
-            )
-        }
-
     }
 }
 
@@ -345,55 +301,6 @@ private fun formatDuration(ms: Long): String {
     val h = totalSec / 3600
     val m = (totalSec % 3600) / 60
     return if (h > 0) "${h}h ${m}m" else "${m}m"
-}
-
-// ---------------------------------------------------------------------------
-// Pre-Prompt consent sheet (the "Local Privacy Shield" framing)
-// ---------------------------------------------------------------------------
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PrePromptSheet(onAllow: () -> Unit, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp)
-                .padding(bottom = 48.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Local Privacy Shield",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "To silence your apps, Android requires us to create a " +
-                    "Local Shield. No data ever leaves your phone — it just " +
-                    "stops the blocked apps from reaching the internet.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(28.dp))
-            androidx.compose.material3.Button(
-                onClick = onAllow,
-                modifier = Modifier.fillMaxWidth().height(54.dp)
-            ) {
-                Text("Allow", fontWeight = FontWeight.Medium)
-            }
-            Spacer(Modifier.height(8.dp))
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text("Not now")
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

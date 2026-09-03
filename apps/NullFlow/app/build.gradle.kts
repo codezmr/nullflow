@@ -48,12 +48,12 @@ android {
     }
 }
 
-// Name the output APK "NullFlow-debug-v1.0.apk" (legacy API —
+// Name the output APK "NullFlow.apk" (legacy API —
 // androidComponents.outputFileName does NOT exist in AGP 8.5.2)
 android.applicationVariants.all {
     outputs.forEach { output ->
         (output as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
-            .outputFileName = "NullFlow-debug-v1.0.apk"
+            .outputFileName = "NullFlow.apk"
     }
 }
 

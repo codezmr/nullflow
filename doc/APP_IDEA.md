@@ -71,7 +71,7 @@
 ### Phase 1 — Scaffolding & Permissions
 - Gradle: compileSdk 34, minSdk 30, Compose BOM 2024.02.00, Room 2.6.1 + KSP,
   Coroutines 1.7.1.
-- APK renamed to `NullFlow-debug-v1.0.apk` (legacy `applicationVariants` block).
+- APK renamed to `NullFlow.apk` (legacy `applicationVariants` block).
 - Manifest: `VIBRATE`, `FOREGROUND_SERVICE`, `QUERY_ALL_PACKAGES`.
 - Service: `.vpn.FocusVpnService` with `BIND_VPN_SERVICE` permission +
   `android.net.VpnService` intent-filter.
@@ -116,7 +116,7 @@
 
 ### Phase 5 — Build & Run
 - `./gradlew assembleDebug --no-daemon`
-- Output: `app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`
+- Output: `app/build/outputs/apk/debug/NullFlow.apk`
 
 ---
 

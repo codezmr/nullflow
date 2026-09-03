@@ -24,7 +24,7 @@
 - `local.properties` → `sdk.dir=/home/mohmmad/Android/Sdk`.
 - **Phase 1 COMPLETE:** root + app `build.gradle.kts` (compileSdk 34, minSdk 30,
   Room 2.6.1 + KSP 1.9.22-1.0.17, coroutines 1.7.1, APK renamed to
-  `NullFlow-debug-v1.0.apk`), `settings.gradle.kts`, `gradle.properties`,
+  `NullFlow.apk`), `settings.gradle.kts`, `gradle.properties`,
   `AndroidManifest.xml` (VIBRATE, POST_NOTIFICATIONS, FOREGROUND_SERVICE + _DATA_SYNC,
   QUERY_ALL_PACKAGES + FocusVpnService with BIND_VPN_SERVICE), res/
   (strings, colors, themes, **provided NullFlow icon kit** — adaptive foreground PNG
@@ -46,10 +46,13 @@
   checklist rows (Notifications `POST_NOTIFICATIONS` + Local Shield
   `VpnService.prepare()`), gatekeeper button (ghost → electric blue + pulse).
   Sequential prompting, real-time check state, heavy haptic on grant.
+- **INSTANT TOGGLE (UX upgrade):** VPN consent is handled DURING onboarding,
+  so the MainScreen hero toggle is now a **1-tap action with zero popups**.
+  PrePromptSheet removed from MainScreen. Toggle ON → startShield() directly.
 
 **Next:**
 - **Phase 5: ASK ZAMIR BEFORE BUILDING.** `./gradlew assembleDebug --no-daemon`
-  → `app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`.
+  → `app/build/outputs/apk/debug/NullFlow.apk`.
 - After build: device-test (onboarding checklist → both checks → Enter, then
   toggle ON → WhatsApp single-tick, OFF → internet back, haptics, bg dim,
   app picker, stats).
@@ -96,7 +99,7 @@
 | JDK | 17 (sourceCompat/jvmTarget) |
 | SDK | `~/Android/Sdk` (android-34, android-36) |
 
-**APK rename:** `app/build.gradle.kts` has an `android.applicationVariants.all { ... outputFileName = "NullFlow-debug-v1.0.apk" }` block (legacy API — `androidComponents.outputFileName` doesn't exist in AGP 8.5.2).
+**APK rename:** `app/build.gradle.kts` has an `android.applicationVariants.all { ... outputFileName = "NullFlow.apk" }` block (legacy API — `androidComponents.outputFileName` doesn't exist in AGP 8.5.2).
 
 ---
 
@@ -123,9 +126,9 @@
 
 ## 🖥️ Build / Install / Debug
 
-- **APK:** `apps/NullFlow/app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`
+- **APK:** `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`
 - **Build:** `cd apps/NullFlow && ./gradlew assembleDebug --no-daemon`
-- **Install:** `adb install -r apps/NullFlow/app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`
+- **Install:** `adb install -r apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`
 - **Logcat:** `adb logcat -s NullFlow`
 
 ---
