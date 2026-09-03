@@ -15,10 +15,54 @@
 
 ---
 
-## ✅ Current Status: BUILT — OFF now fully cleans up (VPN icon + notif)
+## ✅ Current Status: BUILT — back dialog + welcome polish + sticky-restart fix
 
-**Built 2026-09-03 (commit `1ee1e86`):** `NullFlow.apk` (23 MB) at
+**Built 2026-09-03 (commit `1149f21`):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### 🐛 BUG FIXED: VPN icon/notification lingered after OFF (sticky restart)
+Root cause (from log): `onStartCommand` returned **`START_STICKY`** for the
+start path. Every STOP intent → `stopSelf()` → system **re-started** the service
+(sticky) → `onStartCommand(null)` → `else` branch → `startShield()` re-ran →
+tunnel re-established → VPN icon came back. Log showed 5 repeated STOPs.
+**Fixes (`FocusVpnService`):**
+- Start path now returns **`START_NOT_STICKY`** (system won't auto-restart).
+- **Null-intent guard**: `onStartCommand(null)` (system re-delivery after death)
+  now calls `stopSelf()` and does NOT re-establish the tunnel.
+- (Carried from `1ee1e86`): `onDestroy` + STOP path call `stopForeground(REMOVE)`
+  + `cancel(NOTIF_ID)`; "End session" uses distinct PendingIntent request code 2.
+
+### 🆕 UX: back-confirmation dialog
+Pressing back (button OR gesture) now shows **"Leave NullFlow?"** dialog with
+**Minimize** (moveTaskToBack) / **Stay** instead of immediately minimizing.
+Wired via `OnBackPressedDispatcher.addCallback` in `MainActivity`.
+
+### 🆕 Welcome screen polish
+- **Hide granted permissions**: if a permission is already granted, its checklist
+  row is hidden entirely (returning users see a clean screen). "One-time setup"
+  label only shows when something is still needed.
+- **3 feature rows** ("How it works"): Pick apps / One tap zero popups / Data
+  never moves — quiet icon + title + description.
+- (Carried) Rotating tip card (30 lines, auto 6s + tap, TIP/TRICK/MOTIVATE).
+
+### 🆕 Debug: notification/service lifecycle logging
+`buildNotification` logs title/text; `onDestroy` logs each step (fd close,
+stopForeground, cancel) + final state; STOP path logs startId. Easier to trace
+why the icon/notif lingers.
+
+### ⚠️ Still to verify on device
+- Toggle OFF → VPN icon + notification gone (no sticky re-start).
+- Back button/gesture → dialog appears → Minimize/Stay work.
+- Welcome: granted perms hidden; feature rows + tip card render.
+
+**Next:** Zamir installs `1149f21`, tests OFF cleanup + back dialog + welcome.
+Share `Download/NullFlow/nullflow.log` if anything misbehaves.
+
+---
+
+## ✅ Previous Status: BUILT — OFF now fully cleans up (VPN icon + notif)
+
+**Built 2026-09-03 (commit `1ee1e86`):** `NullFlow.apk` (23 MB).
 
 ### 🐛 BUGS FIXED: shield didn't fully turn off
 User report: (1) "End session" from notification did nothing, (2) VPN icon

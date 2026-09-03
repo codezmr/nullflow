@@ -142,3 +142,54 @@
   `establish(): ParcelFileDescriptor`
 - `Vibrator.vibrate(VibrationEffect)` + `VibrationEffect.createOneShot(ms, amp)`
 - `PackageManager.getInstalledApplications(int)` + `ApplicationInfo.loadLabel()/loadIcon()`
+
+---
+
+## Implementation Notes (learned the hard way — 2026-09-03)
+
+### VPN service lifecycle (CRITICAL — caused multiple crashes/lingering icons)
+- **`startForeground()` MUST be called within 5s** of `startForegroundService()`,
+  or Android kills the app with `ForegroundServiceDidNotStartInTimeException`.
+  → Call it **first** in `startShield()`, before reading packages / establishing.
+- **Return `START_NOT_STICKY`** (not `START_STICKY`). With STICKY, every STOP
+  intent → `stopSelf()` → system re-starts the service → `onStartCommand(null)`
+  → re-establishes the tunnel → **VPN icon comes back after OFF**.
+- **Guard null intents**: `onStartCommand(null)` = system re-delivery after death.
+  Do NOT re-establish; call `stopSelf()`.
+- **`onDestroy()` MUST call `stopForeground(STOP_FOREGROUND_REMOVE)`** +
+  `NotificationManager.cancel(NOTIF_ID)`, else the foreground notification +
+  VPN status-bar icon linger after the shield is off.
+- **Distinct PendingIntent request codes** for the notification "End session"
+  (code 2) vs the toggle's stop (code 1) — same code = coalescing = "End
+  session" does nothing.
+- **Stale-state reconcile**: on app start, if `!isShieldRunning` (static flag,
+  resets each process) but Room has a running session → end it + deactivate the
+  profile. (App killed while ON → service dies, Room state survives.)
+
+### Profile model
+- A profile is only "active" once explicitly marked. The UI uses an
+  **`effectiveProfile`** = `activeProfile ?: profiles.firstOrNull()` so the
+  toggle, profile row, and blocked-count all agree (prevents the toggle from
+  minting a new empty profile on every tap).
+- **Mark a profile active when an app is blocked** (in the picker), so the
+  toggle finds it.
+
+### UI/UX decisions
+- **Welcome screen shows on every app open.** Granted permissions are **hidden**
+  (returning users see a clean screen + single "Enter" tap). 3 "how it works"
+  feature rows + a rotating tip card (30 lines: TIP/TRICK/MOTIVATE, auto 6s +
+  tap to swap).
+- **App picker has a "Done · N apps selected" button** (not just swipe-down).
+- **Back button/gesture shows a confirmation dialog** (Minimize / Stay) instead
+  of immediately minimizing.
+- **0-apps guard**: toggling ON with no blocked apps opens the picker.
+
+### Crash-proof logging
+- `AppLog.kt` writes to public `Download/NullFlow/nullflow.log` (MediaStore, no
+  permission) + logcat tag `NullFlow`. Rotates at 2000 lines.
+- `MainActivity` installs a `Thread.setDefaultUncaughtExceptionHandler` (before
+  `super.onCreate`) that writes the full stack trace to the log before the
+  process dies.
+- Logging throughout: activity lifecycle, toggle flow, service lifecycle
+  (onCreate/onStartCommand/startShield/establish/startForeground/onDestroy/
+  onRevoke), notification build, picker block/unblock.
