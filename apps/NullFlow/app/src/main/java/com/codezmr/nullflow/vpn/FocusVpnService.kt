@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.MainActivity
 import com.codezmr.nullflow.R
 import com.codezmr.nullflow.data.FocusDatabase
@@ -59,12 +60,16 @@ class FocusVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.d("FocusVpnService.onCreate")
         createChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val action = intent?.action
+        AppLog.d("FocusVpnService.onStartCommand action=$action startId=$startId")
+        when (action) {
             ACTION_STOP -> {
+                AppLog.d("ACTION_STOP received → stopping service")
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -75,11 +80,19 @@ class FocusVpnService : VpnService() {
 
     /** Build the blackhole tunnel and go foreground. */
     private fun startShield(profileId: Long) {
-        val packages = readBlockedPackages(profileId)
-        Log.i(TAG, "startShield: profileId=$profileId blocked=${packages.size} pkgs")
+        AppLog.d("startShield: reading blocked packages for profileId=$profileId")
+        val packages = try {
+            readBlockedPackages(profileId)
+        } catch (e: Exception) {
+            AppLog.e("startShield: readBlockedPackages FAILED", e)
+            stopSelf()
+            return
+        }
+        AppLog.d("startShield: profileId=$profileId blocked=${packages.size} pkgs → $packages")
 
         if (packages.isEmpty()) {
-            Log.w(TAG, "No blocked apps for this profile — nothing to shield. Stopping.")
+            AppLog.w("No blocked apps for this profile — nothing to shield. Stopping. " +
+                "(UI should tell the user to add apps first.)")
             stopSelf()
             return
         }
@@ -91,25 +104,32 @@ class FocusVpnService : VpnService() {
         for (pkg in packages) {
             try {
                 builder.addAllowedApplication(pkg)
+                AppLog.d("  allowed app: $pkg")
             } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Blocked app no longer installed: $pkg")
+                AppLog.w("Blocked app no longer installed: $pkg")
             }
         }
         builder.setBlocking(true) // silently DROP their packets
 
+        AppLog.d("calling builder.establish() ...")
         val fd = try {
             builder.establish()
         } catch (e: Exception) {
-            Log.e(TAG, "VPN establish failed", e)
+            AppLog.e("VPN establish() FAILED", e)
             stopSelf()
             return
         }
 
         interfaceFd = fd
         sessionStartedAt = System.currentTimeMillis()
-        startForeground(NOTIF_ID, buildNotification())
+        try {
+            startForeground(NOTIF_ID, buildNotification())
+            AppLog.d("startForeground OK — notification posted")
+        } catch (e: Exception) {
+            AppLog.e("startForeground FAILED (notification may not show)", e)
+        }
         startTimerUpdates()
-        Log.i(TAG, "Shield ACTIVE — ${packages.size} apps blackholed")
+        AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
     }
 
     private fun readBlockedPackages(profileId: Long): List<String> {
@@ -122,8 +142,13 @@ class FocusVpnService : VpnService() {
             // Fall back to the currently-active profile.
             dao.observeActiveProfile().first()
         }
-        if (profile == null) return emptyList()
-        return runBlocking { dao.getBlockedApps(profile.id) }.map { it.packageName }
+        if (profile == null) {
+            AppLog.w("readBlockedPackages: no profile found (id=$profileId, no active profile)")
+            return emptyList()
+        }
+        val apps = runBlocking { dao.getBlockedApps(profile.id) }
+        AppLog.d("readBlockedPackages: profile='${profile.name}' (id=${profile.id}) → ${apps.size} apps")
+        return apps.map { it.packageName }
     }
 
     private fun createChannel() {
@@ -177,16 +202,24 @@ class FocusVpnService : VpnService() {
             while (true) {
                 delay(30_000)
                 if (interfaceFd != null) {
-                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                        .notify(NOTIF_ID, buildNotification())
+                    try {
+                        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                            .notify(NOTIF_ID, buildNotification())
+                    } catch (e: Exception) {
+                        AppLog.e("timer notification refresh failed", e)
+                    }
                 }
             }
         }
     }
 
     override fun onDestroy() {
-        Log.i(TAG, "Shield OFF — releasing tunnel")
-        interfaceFd?.close()
+        AppLog.d("FocusVpnService.onDestroy — Shield OFF, releasing tunnel")
+        try {
+            interfaceFd?.close()
+        } catch (e: Exception) {
+            AppLog.e("closing VPN fd failed", e)
+        }
         interfaceFd = null
         serviceScope.cancel()
         super.onDestroy()
@@ -194,7 +227,7 @@ class FocusVpnService : VpnService() {
 
     /** Called by the system if the VPN is revoked (e.g. user disables it in settings). */
     override fun onRevoke() {
-        Log.w(TAG, "VPN revoked by system")
+        AppLog.w("VPN revoked by system (onRevoke) — stopping service")
         stopSelf()
     }
 }

@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusProfile
 import kotlinx.coroutines.delay
@@ -90,8 +91,10 @@ fun MainScreen(
     fun onToggle() {
         Haptics.tick(context)
         val current = activeProfile
+        AppLog.d("TOGGLE tapped: isActive=$isActive activeProfile=${current?.name} runningSession=${runningSession != null}")
         if (isActive) {
             // Turn OFF.
+            AppLog.d("TOGGLE → turning OFF (stop service + end session)")
             stopShield(context)
             endCurrentSession(dao, scope)
             Haptics.disengage(context)
@@ -100,6 +103,7 @@ fun MainScreen(
             // VpnService.prepare() was already answered during onboarding,
             // so the tunnel establishes immediately.
             val profileId = current?.id ?: createDefaultProfile(dao)
+            AppLog.d("TOGGLE → turning ON for profileId=$profileId")
             startShield(context, dao, profileId)
             Haptics.engage(context)
         }
@@ -317,34 +321,52 @@ private fun startShield(context: android.content.Context, dao: FocusDao, profile
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
     )
     scope.launch {
-        dao.clearActive()
-        dao.setActive(profileId, true)
-        dao.insertSession(
-            com.codezmr.nullflow.data.FocusSession(
-                profileId = profileId,
-                startTime = System.currentTimeMillis()
+        try {
+            dao.clearActive()
+            dao.setActive(profileId, true)
+            dao.insertSession(
+                com.codezmr.nullflow.data.FocusSession(
+                    profileId = profileId,
+                    startTime = System.currentTimeMillis()
+                )
             )
-        )
-        val intent = Intent(context, com.codezmr.nullflow.vpn.FocusVpnService::class.java)
-            .setAction(com.codezmr.nullflow.vpn.FocusVpnService.ACTION_START)
-            .putExtra(com.codezmr.nullflow.vpn.FocusVpnService.EXTRA_PROFILE_ID, profileId)
-        context.startForegroundService(intent)
+            AppLog.d("startShield: profile $profileId marked active + session inserted")
+            val intent = Intent(context, com.codezmr.nullflow.vpn.FocusVpnService::class.java)
+                .setAction(com.codezmr.nullflow.vpn.FocusVpnService.ACTION_START)
+                .putExtra(com.codezmr.nullflow.vpn.FocusVpnService.EXTRA_PROFILE_ID, profileId)
+            context.startForegroundService(intent)
+            AppLog.d("startShield: startForegroundService launched")
+        } catch (e: Exception) {
+            AppLog.e("startShield FAILED", e)
+        }
     }
 }
 
 private fun stopShield(context: android.content.Context) {
     val intent = Intent(context, com.codezmr.nullflow.vpn.FocusVpnService::class.java)
         .setAction(com.codezmr.nullflow.vpn.FocusVpnService.ACTION_STOP)
-    context.startService(intent)
+    try {
+        context.startService(intent)
+        AppLog.d("stopShield: ACTION_STOP service launched")
+    } catch (e: Exception) {
+        AppLog.e("stopShield FAILED", e)
+    }
 }
 
 private fun endCurrentSession(dao: FocusDao, scope: kotlinx.coroutines.CoroutineScope) {
     scope.launch {
-        val running = dao.getRunningSession()
-        if (running != null) {
-            dao.endSession(running.id, System.currentTimeMillis())
-            // Deactivate the profile so the next toggle starts fresh.
-            dao.setActive(running.profileId, false)
+        try {
+            val running = dao.getRunningSession()
+            if (running != null) {
+                dao.endSession(running.id, System.currentTimeMillis())
+                // Deactivate the profile so the next toggle starts fresh.
+                dao.setActive(running.profileId, false)
+                AppLog.d("endCurrentSession: session ${running.id} ended, profile ${running.profileId} deactivated")
+            } else {
+                AppLog.w("endCurrentSession: no running session found")
+            }
+        } catch (e: Exception) {
+            AppLog.e("endCurrentSession FAILED", e)
         }
     }
 }

@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.BlockedApp
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.InstalledApp
@@ -72,8 +73,10 @@ fun AppPickerSheet(
     // Load installed apps once.
     LaunchedEffect(Unit) {
         if (!loaded) {
+            AppLog.d("AppPicker: loading installed apps for profile $profileId ...")
             installed = repo.getInstalledApps()
             loaded = true
+            AppLog.d("AppPicker: loaded ${installed.size} apps")
         }
     }
 
@@ -173,22 +176,30 @@ private fun toggleApp(
     currentlyChecked: Boolean
 ) {
     scope.launch {
-        if (currentlyChecked) {
-            // Remove: find the BlockedApp row for this package + profile.
-            val existing = dao.getBlockedApps(profileId).firstOrNull {
-                it.packageName == app.packageName
-            }
-            if (existing != null) dao.deleteBlockedApp(existing.id)
-        } else {
-            dao.insertBlockedApps(
-                listOf(
-                    BlockedApp(
-                        profileId = profileId,
-                        packageName = app.packageName,
-                        appName = app.label
+        try {
+            if (currentlyChecked) {
+                // Remove: find the BlockedApp row for this package + profile.
+                val existing = dao.getBlockedApps(profileId).firstOrNull {
+                    it.packageName == app.packageName
+                }
+                if (existing != null) {
+                    dao.deleteBlockedApp(existing.id)
+                    AppLog.d("AppPicker: UNBLOCKED ${app.packageName} from profile $profileId")
+                }
+            } else {
+                dao.insertBlockedApps(
+                    listOf(
+                        BlockedApp(
+                            profileId = profileId,
+                            packageName = app.packageName,
+                            appName = app.label
+                        )
                     )
                 )
-            )
+                AppLog.d("AppPicker: BLOCKED ${app.packageName} in profile $profileId")
+            }
+        } catch (e: Exception) {
+            AppLog.e("AppPicker: toggle app FAILED", e)
         }
     }
 }
