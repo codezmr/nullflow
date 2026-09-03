@@ -15,33 +15,55 @@
 
 ---
 
-## ✅ Current Status: BUILT WITH LOGGING — debugging the ON/OFF crash
+## ✅ Current Status: BUILT — crash FIXED + welcome screen + rotating tips
 
-**Built 2026-09-03 (commit `57e0ddb`):** `NullFlow.apk` (23 MB) at
+**Built 2026-09-03 (commit `c47f867`):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-**NEW: crash-proof logging (this build):**
-- `AppLog.kt` — writes to PUBLIC `Download/NullFlow/nullflow.log` (MediaStore,
-  no permission) with fallback to app-private dir. Also streams to logcat
-  tag `NullFlow`. Rotates at 2000 lines.
-- **Crash handler** in `MainActivity` (installed BEFORE `super.onCreate`)
-  catches uncaught exceptions from any thread → writes full stack trace to the
-  log file BEFORE the process dies.
-- Logging added to: MainActivity lifecycle, toggle ON/OFF flow, startShield/
-  stopShield/endCurrentSession, FocusVpnService (onCreate/onStartCommand/
-  startShield/establish/startForeground/onDestroy/onRevoke), AppPicker
-  (load + block/unblock).
+### 🐛 CRASH FIXED (root cause confirmed from log)
+The ON/OFF crash was **`ForegroundServiceDidNotStartInTimeException`**.
+Android requires `startForeground()` within **5s** of `startForegroundService()`.
+The old code read blocked apps first; with **0 apps** it called `stopSelf()`
+*without ever calling `startForeground()`* → 5s timeout → app killed.
+**Fix (`FocusVpnService.startShield`):** call `startForeground()` **FIRST**
+(before reading packages / establishing the tunnel), so the 5s contract is
+always satisfied, THEN decide to stay active or stop.
 
-**KNOWN BUG (user report, 2026-09-03):** app CRASHES when turning shield ON
-(and again on OFF). No notification / VPN icon appears. After crash + reopen,
-UI shows "already ON" (stale Room state: active profile + running session were
-inserted before the crash). **The log file will show the exact exception.**
+### 🆕 UI changes (this build)
+- **Welcome screen shows on EVERY app open** (`MainActivity` gate → always
+  `OnboardingScreen`). Returning users see the permission checklist already
+  checked → single "Enter NullFlow" tap. Fresh installs still walk setup.
+- **Rotating tip card** on the welcome screen (upper-middle, between the
+  "0 bytes" line and the permission checklist):
+  - **30 short lines** in `OnboardingScreen.kt` (`TIPS` pool): 10 TIP +
+    10 TRICK + 10 MOTIVATE.
+  - **Auto-swap** every 6s (fade out/in via `Animatable`).
+  - **Manual swap** on tap (same fade). Small `↻` affordance on the right.
+  - **Tag rotates** in fixed order TIP → TRICK → MOTIVATE → …; each step picks
+    a random line from that tag's pool.
+- **0-apps guard** (`MainScreen.onToggle`): toggling ON with 0 blocked apps now
+  opens the app picker instead of starting an empty shield.
+- **Profile row** shows `N apps shielded` / `No apps yet`.
+- **Fresh-install entry point**: "Choose apps to shield" button (OFF, no
+  profile) so apps can be picked BEFORE turning on.
 
-**Next:** Zamir installs, reproduces the crash, shares
-`Download/NullFlow/nullflow.log` → analyze → fix.
-Suspects to check in the log: `establish()` failure, `startForeground`
-timeout (5s), `readBlockedPackages` (runBlocking on main thread), or
-`startForegroundService` from a dead activity.
+### ⚠️ Still to verify on device
+- Toggle ON with apps blocked → does the shield actually engage (VPN icon +
+  notification)? (The crash is fixed, but the happy path wasn't tested yet.)
+- Tip card auto/manual swap + tag rotation look/feel.
+
+**Next:** Zamir installs `c47f867`, tests: (1) pick apps, (2) toggle ON,
+(3) confirm shield works, (4) tip card behavior. Share
+`Download/NullFlow/nullflow.log` if anything misbehaves.
+
+---
+
+## ✅ Previous Status: BUILT WITH LOGGING — debugging the ON/OFF crash
+
+**Built 2026-09-03 (commit `57e0ddb`):** `NullFlow.apk` (23 MB).
+Crash-proof logging (`AppLog.kt` → `Download/NullFlow/nullflow.log`) + crash
+handler + full lifecycle logging. This build's log **confirmed** the
+`ForegroundServiceDidNotStartInTimeException` root cause (fixed in `c47f867`).
 
 ---
 
