@@ -1,8 +1,8 @@
 package com.codezmr.nullflow.ui
 
 import android.content.Intent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -105,7 +105,11 @@ fun MainScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgColor)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -217,7 +221,7 @@ private fun HeroToggle(isActive: Boolean, onClick: () -> Unit) {
             .size(220.dp)
             .scale(scale)
             .shadow(
-                radius = if (isActive) 60.dp else 24.dp,
+                elevation = if (isActive) 24.dp else 10.dp,
                 shape = CircleShape,
                 clip = false
             )

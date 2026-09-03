@@ -7,11 +7,9 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -33,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +44,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -80,14 +80,12 @@ fun OnboardingScreen(onEnter: () -> Unit) {
     val context = LocalContext.current
 
     // ---- Permission state (real-time) ----
+    // (pre-Android 13: notifications are always allowed → true)
     var hasNotificationPerm by remember {
         mutableStateOf(
-            if (Build.VERSION.SDK_INT >= 33) {
+            Build.VERSION.SDK_INT < 33 ||
                 context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                     == PackageManager.PERMISSION_GRANTED
-            } else {
-                true // pre-Android 13: notifications always allowed
-            }
         )
     }
     var hasVpnPerm by remember {
@@ -228,11 +226,11 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Mini null-ring (echoes the app icon: circle + slash)
                     Canvas(modifier = Modifier.size(13.dp)) {
-                        val ring = strokeWidth
+                        val ring = 1.5.dp.toPx()
                         drawCircle(
                             color = StarkWhite.copy(alpha = 0.30f),
                             radius = size.minDimension / 2f - ring / 2f,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = ring)
+                            style = Stroke(width = ring)
                         )
                         drawLine(
                             color = StarkWhite.copy(alpha = 0.30f),
@@ -279,21 +277,27 @@ fun OnboardingScreen(onEnter: () -> Unit) {
 @Composable
 private fun BreathingHero() {
     // 4-second breathing cycle (mirrors resting heart rate).
-    val infiniteTransition = rememberInfiniteTransition(label = "breathe")
-    val breathe by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathe"
-    )
+    // Driven by an Animatable ping-pong loop (infiniteTransition.animateFloat
+    // is not available in Compose 1.6.1).
+    val breathe = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            breathe.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(4000, easing = FastOutSlowInEasing)
+            )
+            breathe.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(4000, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+    val b = breathe.value
     // LED glow: 0.25 (rest) → 1.0 (peak)
-    val ledAlpha = 0.25f + breathe * 0.75f
-    val ledScale = 0.92f + breathe * 0.12f
+    val ledAlpha = 0.25f + b * 0.75f
+    val ledScale = 0.92f + b * 0.12f
     // Subtle whole-icon lift
-    val heroScale = 0.98f + breathe * 0.03f
+    val heroScale = 0.98f + b * 0.03f
 
     Box(
         modifier = Modifier
@@ -311,12 +315,7 @@ private fun BreathingHero() {
                         colors = listOf(Color(0xFF1E1E24), Color(0xFF0C0C10))
                     )
                 )
-                .shadow(
-                    radius = 30.dp,
-                    shape = CircleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.6f),
-                    spotColor = Color.Black.copy(alpha = 0.6f)
-                )
+                .shadow(elevation = 14.dp, shape = CircleShape)
                 .padding(10.dp)
         ) {
             // Inner matte face
@@ -356,12 +355,7 @@ private fun BreathingHero() {
                                 )
                             )
                         )
-                        .shadow(
-                            radius = (8 + breathe * 14).dp,
-                            shape = CircleShape,
-                            ambientColor = IcyBlue.copy(alpha = ledAlpha * 0.8f),
-                            spotColor = IcyBlue.copy(alpha = ledAlpha * 0.8f)
-                        )
+                        .shadow(elevation = (4 + b * 8).dp, shape = CircleShape)
                 ) {
                     // Bright LED core
                     Box(
@@ -403,25 +397,13 @@ private fun NeumorphicChecklistItem(
         animationSpec = tween(350, easing = FastOutSlowInEasing),
         label = "checkScale"
     )
-    // Recessed (unchecked) vs extruded (checked): swap the shadow direction.
-    val shadowRadius = if (isChecked) 18.dp else 12.dp
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .shadow(
-                radius = shadowRadius,
-                shape = RoundedCornerShape(22.dp),
-                // Extruded: light from top-left. Recessed: dark top-left, light bottom-right.
-                ambientColor = if (isChecked)
-                    Color.Black.copy(alpha = 0.5f)
-                else
-                    Color(0xFF000000).copy(alpha = 0.7f),
-                spotColor = if (isChecked)
-                    Color(0xFF2A2A32).copy(alpha = 0.5f)
-                else
-                    Color(0xFF000000).copy(alpha = 0.8f)
+                elevation = if (isChecked) 10.dp else 5.dp,
+                shape = RoundedCornerShape(22.dp)
             )
             .background(
                 brush = if (isChecked)
@@ -450,12 +432,7 @@ private fun NeumorphicChecklistItem(
                 .background(
                     color = if (isChecked) NeonCyan else SurfaceDark
                 )
-                .shadow(
-                    radius = if (isChecked) 10.dp else 0.dp,
-                    shape = CircleShape,
-                    ambientColor = NeonCyan.copy(alpha = glowAlpha),
-                    spotColor = NeonCyan.copy(alpha = glowAlpha)
-                ),
+                .shadow(elevation = if (isChecked) 6.dp else 0.dp, shape = CircleShape),
             contentAlignment = Alignment.Center
         ) {
             if (isChecked) {
@@ -464,7 +441,7 @@ private fun NeumorphicChecklistItem(
                         .size(18.dp)
                         .scale(checkScale)
                 ) {
-                    val stroke = strokeWidth / 2.2f
+                    val stroke = 3.dp.toPx()
                     drawLine(
                         color = Color(0xFF04141A),
                         start = Offset(size.width * 0.12f, size.height * 0.52f),
@@ -527,16 +504,25 @@ private fun NeumorphicChecklistItem(
 
 @Composable
 private fun GatekeeperButton(allGranted: Boolean, onClick: () -> Unit) {
-    val infiniteTransition = rememberInfiniteTransition(label = "gatePulse")
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.025f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1100, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "gatePulse"
-    )
+    // Gentle pulse when active (Animatable ping-pong; infiniteTransition
+    // .animateFloat is not available in Compose 1.6.1).
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(allGranted) {
+        if (allGranted) {
+            while (true) {
+                pulse.animateTo(
+                    targetValue = 1.025f,
+                    animationSpec = tween(1100, easing = FastOutSlowInEasing)
+                )
+                pulse.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(1100, easing = FastOutSlowInEasing)
+                )
+            }
+        } else {
+            pulse.snapTo(1f)
+        }
+    }
 
     val containerColor by animateColorAsState(
         targetValue = if (allGranted) ElectricBlue else SurfaceDark,
@@ -548,24 +534,15 @@ private fun GatekeeperButton(allGranted: Boolean, onClick: () -> Unit) {
         animationSpec = tween(450),
         label = "gateText"
     )
-    val elevation = if (allGranted) 16.dp else 4.dp
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .scale(if (allGranted) pulse else 1f)
+            .scale(if (allGranted) pulse.value else 1f)
             .clip(RoundedCornerShape(20.dp))
             .shadow(
-                radius = elevation,
-                shape = RoundedCornerShape(20.dp),
-                ambientColor = if (allGranted)
-                    ElectricBlue.copy(alpha = 0.5f)
-                else
-                    Color.Black.copy(alpha = 0.5f),
-                spotColor = if (allGranted)
-                    ElectricBlue.copy(alpha = 0.5f)
-                else
-                    Color.Black.copy(alpha = 0.5f)
+                elevation = if (allGranted) 12.dp else 4.dp,
+                shape = RoundedCornerShape(20.dp)
             )
             .background(containerColor)
             .clickable(enabled = allGranted, onClick = onClick)
