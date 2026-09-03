@@ -209,9 +209,9 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                 }
             )
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(30.dp))
 
-            // ---- Footer (quiet, professional — not highlighted) ----
+            // ---- Footer: quiet brand lockup (mark + wordmark · hairline · legal) ----
             val versionName = remember {
                 try {
                     context.packageManager
@@ -220,18 +220,50 @@ fun OnboardingScreen(onEnter: () -> Unit) {
                     "1.0"
                 }
             }
+            val year = remember {
+                java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+            }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Codezmr",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = StarkWhite.copy(alpha = 0.35f)
+                // Brand lockup: the null-ring mark + "codezmr"
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Mini null-ring (echoes the app icon: circle + slash)
+                    Canvas(modifier = Modifier.size(13.dp)) {
+                        val ring = strokeWidth
+                        drawCircle(
+                            color = StarkWhite.copy(alpha = 0.30f),
+                            radius = size.minDimension / 2f - ring / 2f,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = ring)
+                        )
+                        drawLine(
+                            color = StarkWhite.copy(alpha = 0.30f),
+                            start = Offset(size.width * 0.22f, size.height * 0.78f),
+                            end = Offset(size.width * 0.78f, size.height * 0.22f),
+                            strokeWidth = ring
+                        )
+                    }
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        text = "codezmr",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = StarkWhite.copy(alpha = 0.38f),
+                        letterSpacing = 2.2.sp
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                // Hairline divider
+                Box(
+                    modifier = Modifier
+                        .width(46.dp)
+                        .height(1.dp)
+                        .background(StarkWhite.copy(alpha = 0.10f))
                 )
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "v$versionName · © ${java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)} Codezmr. All rights reserved.",
+                    text = "v$versionName  ·  © $year Codezmr  ·  All rights reserved",
                     style = MaterialTheme.typography.labelSmall,
-                    color = StarkWhite.copy(alpha = 0.22f)
+                    color = StarkWhite.copy(alpha = 0.22f),
+                    letterSpacing = 0.4.sp
                 )
             }
 
