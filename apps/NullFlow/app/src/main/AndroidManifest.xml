@@ -5,6 +5,9 @@
     <!-- Haptic feedback on the hero toggle -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Focus timer notification (Android 13+ runtime permission) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Keep the VPN tunnel alive as a foreground service (Android 12+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />

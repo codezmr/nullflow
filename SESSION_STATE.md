@@ -15,7 +15,7 @@
 
 ---
 
-## ✅ Current Status: ALL CODE PHASES DONE (1-4) — AWAITING BUILD PERMISSION
+## ✅ Current Status: ALL CODE DONE (Phases 1-4 + Onboarding) — AWAITING BUILD PERMISSION
 
 **Done so far:**
 - Local git repo initialized (no remote, ever).
@@ -25,25 +25,34 @@
 - **Phase 1 COMPLETE:** root + app `build.gradle.kts` (compileSdk 34, minSdk 30,
   Room 2.6.1 + KSP 1.9.22-1.0.17, coroutines 1.7.1, APK renamed to
   `NullFlow-debug-v1.0.apk`), `settings.gradle.kts`, `gradle.properties`,
-  `AndroidManifest.xml` (VIBRATE, FOREGROUND_SERVICE + _DATA_SYNC,
+  `AndroidManifest.xml` (VIBRATE, POST_NOTIFICATIONS, FOREGROUND_SERVICE + _DATA_SYNC,
   QUERY_ALL_PACKAGES + FocusVpnService with BIND_VPN_SERVICE), res/
-  (strings, colors, themes, adaptive launcher icon — hand-drawn "null ring + slash").
+  (strings, colors, themes, **provided NullFlow icon kit** — adaptive foreground PNG
+  + density mipmaps, background `#101014`).
 - **Phase 2 COMPLETE:** Room DB (`FocusProfile`, `BlockedApp`, `FocusSession`
   entities + `FocusDao` with CRUD + Flow emitters + `FocusDatabase`),
-  `PackageManagerRepo` (filters system apps, caches labels+icons, target allow-list).
+  `PackageManagerRepo` (filters system apps, caches labels+icons, target allow-list),
+  `Settings` (SharedPreferences onboarding flag).
 - **Phase 3 COMPLETE:** `FocusVpnService` (blackhole logic via `addAllowedApplication`
   + `setBlocking(true)`, foreground notification with 30s timer, onRevoke handling).
 - **Phase 4 COMPLETE:** `NullFlowTheme` (dark, rest-mode palette), `Haptics`
   (tick/engage/disengage), `MainScreen` (hero toggle + animateColorAsState bg +
   live session timer + stats + pre-prompt consent sheet), `AppPickerSheet`
   (ModalBottomSheet + LazyColumn + multi-select checkboxes), `MainActivity`
-  (edge-to-edge, wires DAO + picker sheet).
+  (edge-to-edge, onboarding gate, wires DAO + picker sheet).
+- **ONBOARDING COMPLETE (Play-review required):** `OnboardingScreen` — neumorphic
+  dark aesthetic: BreathingHero (3D matte toggle + 4s icy-blue LED pulse),
+  stark value-prop typography, "0 bytes" Halo anchor, two neumorphic tactile
+  checklist rows (Notifications `POST_NOTIFICATIONS` + Local Shield
+  `VpnService.prepare()`), gatekeeper button (ghost → electric blue + pulse).
+  Sequential prompting, real-time check state, heavy haptic on grant.
 
 **Next:**
 - **Phase 5: ASK ZAMIR BEFORE BUILDING.** `./gradlew assembleDebug --no-daemon`
   → `app/build/outputs/apk/debug/NullFlow-debug-v1.0.apk`.
-- After build: device-test (toggle ON → consent → WhatsApp single-tick, OFF →
-  internet back, haptics, bg dim, app picker, stats).
+- After build: device-test (onboarding checklist → both checks → Enter, then
+  toggle ON → WhatsApp single-tick, OFF → internet back, haptics, bg dim,
+  app picker, stats).
 
 ---
 
