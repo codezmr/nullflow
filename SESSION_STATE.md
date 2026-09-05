@@ -15,10 +15,45 @@
 
 ---
 
-## ✅ Current Status: BUILT — welcome screen redesigned (scrollable + premium)
+## ✅ Current Status: BUILT — deterministic teardown (lingering notif FIXED)
 
-**Built 2026-09-03 (commit `3051837`):** `NullFlow.apk` (23 MB) at
+**Built 2026-09-05 (commit `aec5ced`, CLEAN build):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### 🐛 BUG FIXED: notification + VPN icon lingered after OFF (service survived)
+Log showed: notification "End session" fired STOP #1, then toggle fired STOP #2
++ `endCurrentSession` cleared Room (UI → OFF), **but the service process
+survived** — its timer loop kept updating the notification ("00:30 · active")
+after the UI said OFF.
+Root cause: `stopSelf()` (no arg) only stops the *last* start request. With
+multiple pending start requests (notification + toggle), the service lived on.
+**Fix (`FocusVpnService`):**
+- New **`shouldRun`** instance flag (checked by the timer loop) + a single
+  **`teardown()`** helper = the ONLY teardown path.
+- `teardown()`: sets `shouldRun=false` + `isShieldRunning=false`, cancels the
+  timer scope, closes the fd, `stopForeground(REMOVE)`, `cancel(NOTIF_ID)`,
+  `stopSelf()`. **Idempotent** (safe to call repeatedly).
+- STOP / null-intent / `onRevoke` / all `startShield` failure paths now call
+  `teardown()` (not bare `stopSelf()`).
+- Timer loop: `while (shouldRun)` + re-checks before each notify → stops
+  updating the instant a STOP arrives.
+- `startShield` sets `shouldRun=true` on success.
+
+### ⚠️ Still to verify on device
+- Toggle OFF → notification + VPN icon gone **immediately** (no lingering).
+- "End session" from notification → same clean stop.
+- ON → OFF → ON cycle works (fresh `shouldRun` each start).
+- (Carried) welcome screen scroll + premium look, back dialog.
+
+**Next:** Zamir installs `aec5ced`, tests OFF cleanup thoroughly. Share
+`Download/NullFlow/nullflow.log` if the icon/notif still lingers (the new
+`teardown:` log lines will show exactly what ran).
+
+---
+
+## ✅ Previous Status: BUILT — welcome screen redesigned (scrollable + premium)
+
+**Built 2026-09-03 (commit `3051837`):** `NullFlow.apk` (23 MB).
 
 ### 🆕 Welcome screen: scrollable + premium redesign
 User feedback: "not scrollable" + "looks like text text only, make it premium".
