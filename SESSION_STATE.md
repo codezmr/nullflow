@@ -1,6 +1,6 @@
 # NullFlow — Session State
 
-> **Read this first to resume.** Last updated: 2026-09-03.
+> **Read this first to resume.** Last updated: 2026-09-05.
 > Goal: per-app internet kill-switch ("selective Offline Switch") via a local
 > VPN blackhole. Premium UI: hero toggle + haptics + bottom sheets.
 >
@@ -15,7 +15,131 @@
 
 ---
 
-## ✅ Current Status: BUILT — deterministic teardown (lingering notif FIXED)
+## 🚧 In Progress: Architecture Polish & UX Improvements
+
+**Spec:** `doc/POLISH_SPEC.md` (all Q1–Q6 = Option A, approved by Zamir).
+**Status:** docs written, GhostShield committed; implementing the 6 items.
+
+### Scope (all Option A)
+1. **Q1** — notification timer ticks every 1s (`delay(1_000)` in
+   `FocusVpnService.startTimerUpdates`).
+2. **Q2** — fix "End session" desync: the service STOP handler also ends the
+   Room session + deactivates the profile (so tile + panel agree).
+3. **Q3** — QS onboarding gate: `FocusTileService.onClick()` checks
+   `Settings.hasOnboarded`; if false → launch MainActivity (Welcome) + collapse.
+4. **Q4** — app picker: sticky search bar (filters all) + "Suggested" cluster
+   (installed high-distraction apps from `targetPackages`) at top.
+5. **Q5** — `HeroToggle` (MainScreen only) gets a 3D extruded look (dark
+   bottom-right shadow + white top-left highlight). BreathingHero stays flat.
+6. **Q6** — tile panel: replace "N apps shielded" text with a `LazyRow` of
+   blocked-app icons (24dp circle, 8dp spacing) + right-edge gradient fade.
+   New `ProfileWithApps` Room query + PackageManager icon loader (cached).
+7. **Bonus (from logs):** `startActivityAndCollapse` must use a **PendingIntent**
+   (Intent form is disallowed on Android 15).
+
+**Next:** implement 1–7, build, device-test.
+
+---
+
+## ✅ Current Status: BUILT — GhostShield tile crash FIXED (decorView owner)
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### 🐛 BUG FIXED: panel crashed on open — "ViewTreeLifecycleOwner not found"
+Device log (Motorola Edge 40, Android 15 / API 35): tapping the tile →
+`showDialog(FocusPanel)` → `IllegalStateException: ViewTreeLifecycleOwner not
+found from android.widget.FrameLayout{... app:id/container}`.
+Root cause (confirmed via Gemini): `TileService.showDialog()` uses a
+**`TYPE_QS_DIALOG`** window that strips/doesn't propagate lifecycle tags to
+children. Compose's `WindowRecomposer` searches up to the **window root
+(decorView)** and throws if the tag isn't there. We had attached the owner to
+the **ComposeView**, which the search never reached.
+**Fix (`FocusTileService.showFocusPanel`):** attach the `PanelOwner` to the
+**`dialog.window.decorView`** (the root) via `setViewTree*Owner(owner)` — NOT to
+the ComposeView. Order: `setContentView` → attach owners to decorView →
+`showDialog`.
+> Note: Material 1.11.0's `BottomSheetDialog` is NOT a `ViewModelStoreOwner`
+> (Dialog-based, not ComponentDialog), so we still use the lightweight
+> `PanelOwner` (LifecycleOwner + ViewModelStoreOwner + SavedStateRegistryOwner),
+> just attached to the decorView now. `DisposeOnViewTreeLifecycleDestroyed` kept.
+
+### ⚠️ Still to verify on device
+- Tap GhostShield tile → panel opens (NO crash), fully expanded.
+- Master switch ON/OFF, mode switch (hot-swap when ON), "+ Create / Edit Modes".
+- Dismiss panel repeatedly → no crash, no leak.
+
+**Next:** Zamir installs the new APK, taps the tile, confirms the panel opens.
+Share `Download/NullFlow/nullflow.log` if it still crashes.
+
+---
+
+## ✅ Previous Status: BUILT — GhostShield Quick Settings Tile + Focus Panel
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### 🆕 FEATURE: GhostShield — Quick Settings Tile + native Compose Focus Panel
+A QS tile ("GhostShield") in the notification shade. Tapping it opens a native
+`BottomSheetDialog` (Compose) over the current app to flip the shield + switch
+modes in ~0.5s without opening the main app. Spec: `doc/GHOSTSHIELD_SPEC.md`,
+questions/decisions: `doc/QUESTIONS_GHOSTSHIELD.md` (all answered "defaults").
+
+**New files:**
+- `tile/FocusTileService.kt` — the QS tile. `onStartListening()` reflects state
+  (blue glow ACTIVE / grey INACTIVE) + reactively syncs from Room. `onClick()`
+  → `showFocusPanel()` (handles `isLocked` via `unlockAndRun`). Panel =
+  `BottomSheetDialog` + `ComposeView` rendering `TileFocusPanel`.
+  - **Lifecycle (verified best practice, via Gemini):** does NOT implement
+    `LifecycleOwner` on the service. Uses a private `PanelOwner`
+    (LifecycleOwner + ViewModelStoreOwner + SavedStateRegistryOwner) attached
+    via `setViewTree*Owner(owner)`. `ViewCompositionStrategy
+    .DisposeOnViewTreeLifecycleDestroyed` → no leaks. Owner destroyed on
+    dismiss + `onDestroy` dismisses the dialog (no Window leak).
+  - **QS overlay fix:** `behavior.state = STATE_EXPANDED` + `skipCollapsed = true`
+    (avoids half-cut sheet). `startActivityAndCollapse` with
+    `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP`.
+- `ui/tile/TileFocusPanel.kt` — Compose panel: master `Switch` (ON = start
+  shield for active profile + insert session; OFF = stop + end session),
+  "SELECT MODE" `LazyColumn` (RadioButton + name + "N apps shielded"),
+  "+ Create / Edit Modes" → opens main app. All Room writes on `Dispatchers.IO`.
+- `data/ProfileWithCount.kt` — (id, name, isActive, appCount) for the panel.
+- `res/drawable/ic_hero_toggle.xml` — vector (circle + slash, the null-ring mark).
+
+**Modified files:**
+- `vpn/FocusVpnService.kt` — added `ACTION_STOP_SHIELD` + `ACTION_REFRESH_RULES`
+  + companion intent builders (`startIntent`/`stopIntent`/`refreshIntent`).
+  - **Hot-swap (Q1=A):** `refreshRules()` closes the old tunnel fd + re-`establish()`
+    with the new active profile's packages, WITHOUT tearing down the foreground
+    service/notification (no flicker). Tunnel can't be edited in place, so
+    close+re-establish is the only correct way. Extracted `establishTunnel()`.
+  - `ACTION_STOP_SHIELD` → `teardown()` (same as `ACTION_STOP`).
+- `data/FocusDao.kt` — added `observeProfilesWithAppCount(): Flow<List<ProfileWithCount>>`.
+- `build.gradle.kts` — added `com.google.android.material:material:1.11.0`
+  (for `BottomSheetDialog`; cached, VPN-safe).
+- `AndroidManifest.xml` — registered `.tile.FocusTileService`
+  (`BIND_QUICK_SETTINGS_TILE`, `QS_TILE` intent-filter, label "GhostShield").
+- `res/values/themes.xml` — `NullFlow_BottomSheet_Dialog`
+  (parent `Theme.Material3.DayNight.BottomSheetDialog`, transparent + dim + floating).
+- `res/values/colors.xml` + `strings.xml` — tile tints + `tile_label`.
+
+### ⚠️ Still to verify on device
+- Add the "GhostShield" tile to the QS shade (edit tiles) → it appears.
+- Tap tile → panel opens over current app, fully expanded (not half-cut).
+- Master switch ON → shield engages (VPN icon + notif); OFF → clean stop.
+- Switch mode while ON → tunnel hot-swaps (blocked apps change, no notif flicker).
+- Switch mode while OFF → just updates the active profile (no auto-start).
+- "+ Create / Edit Modes" → panel closes, main app opens.
+- Tile icon tints blue when active, grey when off.
+- No crash/leak when dismissing the panel repeatedly.
+
+**Next:** Zamir installs the new APK, adds the GhostShield tile, tests the flow.
+Share `Download/NullFlow/nullflow.log` if the panel misbehaves (new `TilePanel:`
++ `FocusTileService.` log lines).
+
+---
+
+## ✅ Previous Status: BUILT — deterministic teardown (lingering notif FIXED)
 
 **Built 2026-09-05 (commit `aec5ced`, CLEAN build):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.

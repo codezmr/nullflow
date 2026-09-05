@@ -30,6 +30,17 @@ interface FocusDao {
     @Query("SELECT * FROM focus_profiles WHERE id = :id")
     suspend fun getProfile(id: Long): FocusProfile?
 
+    /**
+     * Reactive list of every profile with its blocked-app count, for the
+     * Quick Settings tile panel. One row per profile, ordered by id.
+     */
+    @Query(
+        "SELECT p.id AS id, p.name AS name, p.isActive AS isActive, " +
+            "(SELECT COUNT(*) FROM blocked_apps b WHERE b.profileId = p.id) AS appCount " +
+            "FROM focus_profiles p ORDER BY p.id ASC"
+    )
+    fun observeProfilesWithAppCount(): Flow<List<ProfileWithCount>>
+
     @Query("UPDATE focus_profiles SET name = :name WHERE id = :id")
     suspend fun renameProfile(id: Long, name: String)
 

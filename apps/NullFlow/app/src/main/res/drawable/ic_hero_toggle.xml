@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GhostShield QS tile icon — the "null-ring" brand mark:
+  a circle with a diagonal slash (echoes the app icon).
+  Tinted by the system (grey when inactive, blue glow when active).
+  24dp standard icon canvas.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+
+    <!-- Outer ring (circle outline) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M12,3 A9,9 0 1,0 12,21 A9,9 0 1,0 12,3 Z" />
+
+    <!-- Diagonal slash (the "null" strike-through) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M6.5,17.5 L17.5,6.5" />
+</vector>

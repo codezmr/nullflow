@@ -49,6 +49,20 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+
+        <!-- GhostShield: the Quick Settings tile. Tapping it opens the native
+             Compose Focus Panel over the current app. BIND_QUICK_SETTINGS_TILE
+             is the system permission Android checks before showing the tile. -->
+        <service
+            android:name=".tile.FocusTileService"
+            android:label="GhostShield"
+            android:icon="@drawable/ic_hero_toggle"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

@@ -5,4 +5,17 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
+    <!-- GhostShield QS tile Focus Panel. A Material3 dark bottom-sheet dialog
+         used as a native system overlay via TileService.showDialog().
+         Transparent window + dim + floating so it renders as a panel, not a
+         full screen. (Theme.Material3.*.BottomSheetDialog ships with the
+         Material Components 1.11.0 dependency.) -->
+    <style name="NullFlow_BottomSheet_Dialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>

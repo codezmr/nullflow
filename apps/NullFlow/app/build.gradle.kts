@@ -69,6 +69,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
 
+    // Material Components — required for com.google.android.material.bottomsheet
+    // .BottomSheetDialog, which TileService.showDialog() needs to host the
+    // Compose Focus Panel as a native system overlay.
+    implementation("com.google.android.material:material:1.11.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1")
 

@@ -48,6 +48,9 @@ class FocusVpnService : VpnService() {
         const val TAG = "NullFlow"
         const val ACTION_START = "com.codezmr.nullflow.action.START"
         const val ACTION_STOP = "com.codezmr.nullflow.action.STOP"
+        // Quick Settings tile actions.
+        const val ACTION_STOP_SHIELD = "com.codezmr.nullflow.action.STOP_SHIELD"
+        const val ACTION_REFRESH_RULES = "com.codezmr.nullflow.action.REFRESH_RULES"
         const val EXTRA_PROFILE_ID = "profile_id"
 
         private const val CHANNEL_ID = "focus_session"
@@ -62,6 +65,26 @@ class FocusVpnService : VpnService() {
         @Volatile
         var isShieldRunning: Boolean = false
             private set
+
+        /**
+         * Build the ACTION_START intent for a given profile. Shared by the main
+         * app hero toggle and the Quick Settings tile so both start the shield
+         * identically.
+         */
+        fun startIntent(context: Context, profileId: Long): Intent =
+            Intent(context, FocusVpnService::class.java)
+                .setAction(ACTION_START)
+                .putExtra(EXTRA_PROFILE_ID, profileId)
+
+        /** Build the ACTION_STOP_SHIELD intent (used by the tile panel). */
+        fun stopIntent(context: Context): Intent =
+            Intent(context, FocusVpnService::class.java)
+                .setAction(ACTION_STOP_SHIELD)
+
+        /** Build the ACTION_REFRESH_RULES intent (used by the tile panel). */
+        fun refreshIntent(context: Context): Intent =
+            Intent(context, FocusVpnService::class.java)
+                .setAction(ACTION_REFRESH_RULES)
     }
 
     private var interfaceFd: ParcelFileDescriptor? = null
@@ -130,9 +153,18 @@ class FocusVpnService : VpnService() {
         val action = intent?.action
         AppLog.d("FocusVpnService.onStartCommand action=$action startId=$startId intent=${intent != null}")
         when (action) {
-            ACTION_STOP -> {
-                AppLog.d("ACTION_STOP received → teardown (startId=$startId)")
+            ACTION_STOP, ACTION_STOP_SHIELD -> {
+                AppLog.d("$action received → teardown (startId=$startId)")
                 teardown()
+                return START_NOT_STICKY
+            }
+            ACTION_REFRESH_RULES -> {
+                // Hot-swap the blackhole rules WITHOUT tearing down the
+                // foreground service / notification. Only meaningful while the
+                // tunnel is live; if it's off this is a no-op (the panel only
+                // sends this while the shield is ON).
+                AppLog.d("ACTION_REFRESH_RULES received → hot-swap tunnel (startId=$startId)")
+                refreshRules()
                 return START_NOT_STICKY
             }
             // A NULL intent means the system is re-delivering after the process
@@ -188,6 +220,24 @@ class FocusVpnService : VpnService() {
         }
 
         // 3) Build + establish the blackhole tunnel.
+        val fd = establishTunnel(packages) ?: run {
+            teardown()
+            return
+        }
+
+        interfaceFd = fd
+        shouldRun = true
+        isShieldRunning = true
+        startTimerUpdates()
+        AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
+    }
+
+    /**
+     * Build a fresh blackhole tunnel for the given package list and establish
+     * it. Returns the new interface fd, or null if establishment failed.
+     * Shared by startShield() (initial start) and refreshRules() (hot-swap).
+     */
+    private fun establishTunnel(packages: List<String>): ParcelFileDescriptor? {
         val builder = Builder()
         builder.setSession("NullFlow")
         builder.addAddress("10.0.0.2", 32)
@@ -203,19 +253,64 @@ class FocusVpnService : VpnService() {
         builder.setBlocking(true) // silently DROP their packets
 
         AppLog.d("calling builder.establish() ...")
-        val fd = try {
+        return try {
             builder.establish()
         } catch (e: Exception) {
             AppLog.e("VPN establish() FAILED", e)
-            teardown()
+            null
+        }
+    }
+
+    /**
+     * Hot-swap the blackhole rules while the shield is already running.
+     *
+     * Android's VpnService tunnel CANNOT be edited after establish(), so the
+     * only correct way to change the blocked-app set is: close the old fd,
+     * re-establish a new tunnel with the new package list. The foreground
+     * service + notification stay up the whole time (no flicker, no OS churn).
+     *
+     * Runs on the service's IO scope. If the new profile has no blocked apps,
+     * we tear down (nothing to shield).
+     */
+    private fun refreshRules() {
+        if (!isShieldRunning) {
+            AppLog.w("refreshRules: shield not running — no-op (panel should only send this while ON)")
             return
         }
+        serviceScope.launch {
+            // 1) Read the new active profile's blocked packages.
+            val packages = try {
+                readBlockedPackages(-1L) // -1 → resolve the currently-active profile
+            } catch (e: Exception) {
+                AppLog.e("refreshRules: readBlockedPackages FAILED", e)
+                return@launch
+            }
+            AppLog.d("refreshRules: new active profile → ${packages.size} pkgs → $packages")
 
-        interfaceFd = fd
-        shouldRun = true
-        isShieldRunning = true
-        startTimerUpdates()
-        AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
+            if (packages.isEmpty()) {
+                AppLog.w("refreshRules: new profile has 0 blocked apps → tearing down")
+                teardown()
+                return@launch
+            }
+
+            // 2) Close the old tunnel, then establish a new one.
+            try {
+                interfaceFd?.close()
+                AppLog.d("refreshRules: old tunnel fd closed")
+            } catch (e: Exception) {
+                AppLog.e("refreshRules: closing old fd failed", e)
+            }
+            interfaceFd = null
+
+            val fd = establishTunnel(packages)
+            if (fd == null) {
+                AppLog.e("refreshRules: re-establish FAILED → tearing down")
+                teardown()
+                return@launch
+            }
+            interfaceFd = fd
+            AppLog.d("refreshRules: tunnel hot-swapped — ${packages.size} apps blackholed. fd=$fd")
+        }
     }
 
     private fun readBlockedPackages(profileId: Long): List<String> {

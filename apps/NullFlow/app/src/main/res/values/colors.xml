@@ -2,4 +2,14 @@
 <resources>
     <color name="ic_launcher_background">#101014</color>
     <color name="accent">#4F8CFF</color>
+
+    <!-- GhostShield QS tile icon tints -->
+    <color name="tile_active">#00E5FF</color>
+    <color name="tile_inactive">#8A93A6</color>
+
+    <!-- Focus Panel (QS tile) palette -->
+    <color name="panel_bg">#0A0C10</color>
+    <color name="panel_accent">#00E5FF</color>
+    <color name="panel_divider">#1E222B</color>
+    <color name="panel_muted">#808080</color>
 </resources>
