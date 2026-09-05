@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusProfile
+import com.codezmr.nullflow.ui.tile.rememberAppIconPainter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -219,6 +224,17 @@ fun MainScreen(
                         text = "Edit apps",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // ---- Blocked-app icon row (transparency: see exactly what's
+                // shielded) — mirrors the QS tile panel's icon row. ----
+                if (blockedCount > 0) {
+                    Spacer(Modifier.height(12.dp))
+                    BlockedAppIconRow(
+                        context = context,
+                        apps = blockedApps,
+                        bg = bgColor
                     )
                 }
             } else {
@@ -469,5 +485,54 @@ private fun createDefaultProfile(dao: FocusDao): Long {
     // dialog), so runBlocking is acceptable here — it's a single local insert.
     return kotlinx.coroutines.runBlocking {
         dao.insertProfile(FocusProfile(name = "Deep Work"))
+    }
+}
+
+/**
+ * A horizontal, scrollable row of the blocked apps' icons (24dp circles,
+ * 8dp spacing) with a right-edge gradient fade as a scroll hint. Mirrors the
+ * QS tile panel's icon row so the user sees exactly what's shielded.
+ */
+@Composable
+private fun BlockedAppIconRow(
+    context: android.content.Context,
+    apps: List<com.codezmr.nullflow.data.BlockedApp>,
+    bg: Color
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(apps, key = { it.packageName }) { app ->
+                val painter = rememberAppIconPainter(context, app.packageName)
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E2430))
+                ) {
+                    Image(
+                        painter = painter,
+                        contentDescription = app.appName,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+        // Right-edge gradient fade (scroll hint).
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(36.dp)
+                .fillMaxHeight()
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            bg.copy(alpha = 0f),
+                            bg.copy(alpha = 0.9f)
+                        )
+                    )
+                )
+        )
     }
 }

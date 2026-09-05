@@ -1,6 +1,5 @@
 package com.codezmr.nullflow.ui
 
-import android.graphics.Bitmap
 import android.os.VibrationEffect
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -52,7 +50,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +61,7 @@ import com.codezmr.nullflow.data.BlockedApp
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.InstalledApp
 import com.codezmr.nullflow.data.PackageManagerRepo
+import com.codezmr.nullflow.ui.tile.rememberAppIconPainter
 import kotlinx.coroutines.launch
 
 // ---- Focus Matrix palette ----
@@ -79,12 +77,13 @@ private val BadgeUnselected = Color(0xFF1E2430)
  * "The Focus Matrix" — the app picker, redesigned with NO checkboxes.
  *
  *  - Sticky dark-glass search bar (filters the entire list by label).
- *  - One-tap Preset Chips (Social Noise / Media Binge / Chat Drops) that
- *    block/unblock a whole category in one tap.
  *  - Tactile App Cards: unselected = dark + "+ ADD"; selected = cyan glow +
  *    "🔒 SHIELDED" + vibrant icon with a radial halo. Micro-spring press +
  *    thud haptic.
  *  - "Done · N apps selected" bar at the bottom.
+ *
+ *  Users build their own modes by picking individual apps — no opaque
+ *  predefined categories (trust: the user always sees exactly what's blocked).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -153,8 +152,9 @@ fun AppPickerSheet(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
+                val shieldedCount = blockedPackages.size
                 Text(
-                    text = "$blockedPackages.size Shielded",
+                    text = if (shieldedCount == 0) "No apps shielded" else "$shieldedCount Shielded",
                     style = MaterialTheme.typography.bodyMedium,
                     color = AccentCyan,
                     fontWeight = FontWeight.SemiBold
@@ -184,34 +184,6 @@ fun AppPickerSheet(
                 )
             )
 
-            // ---- One-tap preset chips (only when not searching) ----
-            if (query.isBlank()) {
-                Text(
-                    text = "ONE-TAP PRESETS",
-                    color = MutedText,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 28.dp, bottom = 8.dp)
-                )
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(repo.presets) { preset ->
-                        PresetChip(
-                            preset = preset,
-                            installed = installed,
-                            blockedPackages = blockedPackages,
-                            onToggle = {
-                                Haptics.tick(context)
-                                togglePreset(dao, scope, profileId, preset, installed, blockedPackages)
-                            }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-
             // ---- Section label ----
             Text(
                 text = if (query.isBlank()) "ALL APPS" else "RESULTS",
@@ -230,7 +202,7 @@ fun AppPickerSheet(
                 items(filtered, key = { it.packageName }) { app ->
                     TactileAppCard(
                         appName = app.label,
-                        icon = app.icon,
+                        packageName = app.packageName,
                         isShielded = app.packageName in blockedPackages,
                         onToggle = {
                             Haptics.thud(context)
@@ -287,69 +259,19 @@ fun AppPickerSheet(
 }
 
 // ---------------------------------------------------------------------------
-// Preset chip
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun PresetChip(
-    preset: PackageManagerRepo.Preset,
-    installed: List<InstalledApp>,
-    blockedPackages: Set<String>,
-    onToggle: () -> Unit
-) {
-    // Which of this preset's apps are installed?
-    val installedInPreset = remember(installed, preset) {
-        val installedPkgs = installed.map { it.packageName }.toSet()
-        preset.packages.filter { it in installedPkgs }
-    }
-    // All installed preset apps already blocked?
-    val allBlocked = installedInPreset.isNotEmpty() &&
-        installedInPreset.all { it in blockedPackages }
-
-    val bg by animateColorAsState(
-        targetValue = if (allBlocked) AccentCyan.copy(alpha = 0.18f) else GlassSurface,
-        label = "chip_bg"
-    )
-    val border by animateColorAsState(
-        targetValue = if (allBlocked) AccentCyan else BorderUnselected,
-        label = "chip_border"
-    )
-    val text by animateColorAsState(
-        targetValue = if (allBlocked) AccentCyan else Color.White,
-        label = "chip_text"
-    )
-
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50.dp))
-            .background(bg)
-            .border(1.dp, border, RoundedCornerShape(50.dp))
-            .clickable(enabled = installedInPreset.isNotEmpty(), onClick = onToggle)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = preset.emoji, fontSize = 14.sp)
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = preset.label,
-            color = text,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Tactile app card (replaces the checkbox)
 // ---------------------------------------------------------------------------
 
 @Composable
 private fun TactileAppCard(
     appName: String,
-    icon: Bitmap,
+    packageName: String,
     isShielded: Boolean,
     onToggle: () -> Unit
 ) {
+    val context = LocalContext.current
+    // Reuse the proven tile-panel icon loader (async, cached, BitmapPainter).
+    val iconPainter = rememberAppIconPainter(context, packageName)
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
@@ -404,7 +326,7 @@ private fun TactileAppCard(
                     )
                 }
                 androidx.compose.foundation.Image(
-                    bitmap = icon.asImageBitmap(),
+                    painter = iconPainter,
                     contentDescription = appName,
                     // Desaturate (grey out) the icon when unselected; full color
                     // when shielded. A semi-transparent grey tint reads as "muted".
@@ -482,53 +404,4 @@ private fun toggleApp(
     }
 }
 
-/**
- * One-tap preset: if ALL installed preset apps are already blocked → unblock
- * them all; otherwise → block them all. Only affects installed apps.
- */
-private fun togglePreset(
-    dao: FocusDao,
-    scope: kotlinx.coroutines.CoroutineScope,
-    profileId: Long,
-    preset: PackageManagerRepo.Preset,
-    installed: List<InstalledApp>,
-    blockedPackages: Set<String>
-) {
-    scope.launch {
-        try {
-            val installedPkgs = installed.map { it.packageName }.toSet()
-            val presetInstalled = preset.packages.filter { it in installedPkgs }
-            if (presetInstalled.isEmpty()) {
-                AppLog.d("AppPicker: preset '${preset.label}' — no installed apps, no-op")
-                return@launch
-            }
-            val allBlocked = presetInstalled.all { it in blockedPackages }
-            if (allBlocked) {
-                // Unblock all.
-                val existing = dao.getBlockedApps(profileId)
-                for (row in existing) {
-                    if (row.packageName in presetInstalled) {
-                        dao.deleteBlockedApp(row.id)
-                    }
-                }
-                AppLog.d("AppPicker: preset '${preset.label}' UNBLOCKED ${presetInstalled.size} apps")
-            } else {
-                // Block all (need labels).
-                val labelMap = installed.associate { it.packageName to it.label }
-                val toAdd = presetInstalled.map { pkg ->
-                    BlockedApp(
-                        profileId = profileId,
-                        packageName = pkg,
-                        appName = labelMap[pkg] ?: pkg
-                    )
-                }
-                dao.insertBlockedApps(toAdd)
-                dao.clearActive()
-                dao.setActive(profileId, true)
-                AppLog.d("AppPicker: preset '${preset.label}' BLOCKED ${toAdd.size} apps")
-            }
-        } catch (e: Exception) {
-            AppLog.e("AppPicker: toggle preset FAILED", e)
-        }
-    }
-}
+

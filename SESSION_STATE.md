@@ -15,7 +15,37 @@
 
 ---
 
-## ✅ Current Status: BUILT — Architecture Polish & UX Improvements (all 6 done)
+## ✅ Current Status: BUILT — Focus Matrix v2 (no presets, home-screen icons, bug fixes)
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### What changed (this round — approved by Zamir)
+1. **Dropped predefined presets** (`AppPickerSheet.kt`): removed the
+   "ONE-TAP PRESETS" section, `PresetChip` composable, and `togglePreset()`.
+   Users now build their own modes by picking individual apps (trust: no opaque
+   categories). `PackageManagerRepo.presets` is now unused (left in place, harmless).
+2. **Fixed header string leak** (`AppPickerSheet.kt`): the header now uses
+   `val shieldedCount = blockedPackages.size` then `"$shieldedCount Shielded"`
+   (or "No apps shielded" when 0). No more raw-list interpolation.
+3. **Unified app-icon loading** (`AppPickerSheet.kt`): `TactileAppCard` now
+   takes `packageName` (not `Bitmap`) and renders via the proven
+   `rememberAppIconPainter` (async, cached, `BitmapPainter`) — same loader the
+   QS tile panel uses. Replaced the deprecated `Image(bitmap = ...)` overload.
+   Cleaned up now-unused imports (`Bitmap`, `asImageBitmap`, `LazyRow`).
+4. **Home-screen blocked-app icon row** (`MainScreen.kt`): beneath the active
+   profile name, a scrollable `LazyRow` of the blocked apps' icons (24dp
+   circles, 8dp spacing) + right-edge gradient fade — mirrors the tile panel so
+   the user sees exactly what's shielded. New `BlockedAppIconRow` composable.
+
+### ⚠️ Still to verify on device
+- App picker: NO preset chips; search + tactile cards only; icons render (not
+  grey circles); header shows "N Shielded" (not a raw list).
+- Home screen: blocked-app icon row appears under the profile name + fades right.
+
+---
+
+## ✅ Previous: Architecture Polish & UX Improvements (all 6 done)
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
