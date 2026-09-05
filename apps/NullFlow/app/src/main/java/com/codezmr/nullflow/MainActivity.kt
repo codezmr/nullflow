@@ -85,18 +85,33 @@ class MainActivity : ComponentActivity() {
                             showExitDialog = false
                         },
                         title = {
-                            Text("Leave NullFlow?")
+                            Text("Exit NullFlow?")
                         },
                         text = {
-                            Text("Your shield keeps running in the background. You can come back anytime.")
+                            Text("This stops the shield and closes the app completely. Your focus data is saved on this phone.")
                         },
                         confirmButton = {
                             TextButton(onClick = {
-                                AppLog.d("exit confirmed → minimizing app")
+                                AppLog.d("exit confirmed → stopping shield + closing app")
                                 showExitDialog = false
-                                moveTaskToBack(true)
+                                // 1) Stop the shield (if running). This sends
+                                //    ACTION_STOP to the service → teardown()
+                                //    closes the tunnel, removes the notification,
+                                //    ends the Room session, deactivates the profile.
+                                //    Idempotent — safe if the shield is already off.
+                                try {
+                                    startService(FocusVpnService.stopIntent(this))
+                                    AppLog.d("exit: ACTION_STOP sent to FocusVpnService")
+                                } catch (e: Exception) {
+                                    AppLog.e("exit: failed to stop shield", e)
+                                }
+                                // 2) Close the app completely (all activities in
+                                //    this task). The shield is already stopped
+                                //    above, so nothing lingers in the background.
+                                finishAffinity()
+                                AppLog.d("exit: finishAffinity() called — app closing")
                             }) {
-                                Text("Minimize")
+                                Text("Exit")
                             }
                         },
                         dismissButton = {

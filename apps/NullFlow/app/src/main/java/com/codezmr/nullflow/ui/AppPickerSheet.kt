@@ -308,7 +308,9 @@ private fun TactileAppCard(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Icon (with radial halo when shielded)
+            // Icon (with radial halo when shielded).
+            // A visible placeholder circle sits BEHIND the async-loaded icon so
+            // the slot is never empty while the bitmap loads on Dispatchers.IO.
             Box(contentAlignment = Alignment.Center) {
                 if (isShielded) {
                     Box(
@@ -325,6 +327,15 @@ private fun TactileAppCard(
                             )
                     )
                 }
+                // Placeholder circle (visible while the icon bitmap loads).
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            color = if (isShielded) Color(0xFF1E2A35) else Color(0xFF1A1E26)
+                        )
+                )
                 androidx.compose.foundation.Image(
                     painter = iconPainter,
                     contentDescription = appName,

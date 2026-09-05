@@ -15,7 +15,41 @@
 
 ---
 
-## ✅ Current Status: BUILT — Welcome Screen "Initiation Sequence"
+## ✅ Current Status: CODE-COMPLETE — Tactical HUD Header + Exit Dialog + Icon Fix
+
+**NOT YET BUILT** (awaiting Zamir's go-ahead). Three changes, all code-complete:
+
+### What changed (this round — approved by Zamir)
+1. **Tactical HUD Header** (`MainScreen.kt`): replaced the centered "NullFlow"
+   + tagline with a top-left asymmetrical HUD:
+   - **"NULLFLOW"** all-caps, `FontWeight.Black`, `letterSpacing = 2.sp`, 22sp.
+   - **Status line:** 6dp circular node + monospace `Text` (`FontFamily.Monospace`,
+     11sp). State-driven:
+     - **ON:** cyan `#00E5FF` node with `shadow(blur=8dp)` glow + `SYS.STATUS: SECURE`.
+     - **OFF:** muted grey `#4A4E58` node (no glow) + `SYS.STATUS: STANDBY` (`#8A8F99`).
+   - `statusBarsPadding()` for notch/cutout safety. Animated color/glow (400ms).
+   - 40dp guaranteed min gap to the Hero Switch.
+2. **Exit Dialog** (`MainActivity.kt`): "Minimize" → **"Exit"**. On Exit: sends
+   `ACTION_STOP` to `FocusVpnService` (stops shield + ends session + cleans Room +
+   removes notification — idempotent), then `finishAffinity()` to close the app
+   completely. Rationale: "Minimize" made no sense (user can just switch apps).
+3. **App Picker Icon Placeholder** (`AppPickerSheet.kt` `TactileAppCard`): added a
+   visible 40dp placeholder circle BEHIND the async-loaded icon. Root cause:
+   `rememberAppIconPainter` returns a transparent `ColorPainter` until the bitmap
+   loads on `Dispatchers.IO`, so the icon slot appeared empty until the user tapped
+   the card (recomposition after load). Now the slot always shows a dark circle.
+
+### ⚠️ Still to verify on device (after build)
+- HUD header: top-left "NULLFLOW" + status line. ON → cyan glow + "SECURE";
+  OFF → grey + "STANDBY". No notch/cutout overlap.
+- Back button → "Exit NullFlow?" dialog → Exit stops shield + closes app;
+  Stay dismisses.
+- App picker: icons show a placeholder circle immediately (not empty) while
+  loading; icon fades in on top.
+
+---
+
+## ✅ Previous: BUILT — Welcome Screen "Initiation Sequence"
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero new warnings):**
 `NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
@@ -490,10 +524,15 @@ tunnel re-established → VPN icon came back. Log showed 5 repeated STOPs.
 - (Carried from `1ee1e86`): `onDestroy` + STOP path call `stopForeground(REMOVE)`
   + `cancel(NOTIF_ID)`; "End session" uses distinct PendingIntent request code 2.
 
-### 🆕 UX: back-confirmation dialog
-Pressing back (button OR gesture) now shows **"Leave NullFlow?"** dialog with
-**Minimize** (moveTaskToBack) / **Stay** instead of immediately minimizing.
-Wired via `OnBackPressedDispatcher.addCallback` in `MainActivity`.
+### 🆕 UX: back-confirmation dialog (now "Exit")
+Pressing back (button OR gesture) shows **"Exit NullFlow?"** dialog with
+**Exit** / **Stay**. Wired via `OnBackPressedDispatcher.addCallback` in
+`MainActivity`.
+- **Exit** (was "Minimize"): sends `ACTION_STOP` to `FocusVpnService` (stops
+  shield + ends session + cleans Room + removes notification — idempotent),
+  then `finishAffinity()` to close the app completely. Rationale: "Minimize"
+  made no sense (the user can just switch apps); "Exit" fully tears down.
+- **Stay**: dismisses the dialog.
 
 ### 🆕 Welcome screen polish
 - **Hide granted permissions**: if a permission is already granted, its checklist
@@ -510,7 +549,8 @@ why the icon/notif lingers.
 
 ### ⚠️ Still to verify on device
 - Toggle OFF → VPN icon + notification gone (no sticky re-start).
-- Back button/gesture → dialog appears → Minimize/Stay work.
+- Back button/gesture → dialog appears → Exit (stops shield + closes app) /
+  Stay work.
 - Welcome: granted perms hidden; feature rows + tip card render.
 
 **Next:** Zamir installs `1149f21`, tests OFF cleanup + back dialog + welcome.

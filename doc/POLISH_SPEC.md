@@ -188,11 +188,46 @@ payload (strict zero-data privacy — never inspected/logged/stored).
     instructions.
   - **Optional** — never blocks onboarding.
 
-### 4.5 Zero-Warning Cleanup
+ ### 4.5 Zero-Warning Cleanup
 **File:** `ui/MainScreen.kt`
 - Replaced the two `effectiveProfile!!` non-null assertions with a safe local
   `val profile = effectiveProfile` inside the `if` block. Both compiler
   warnings eliminated.
+
+---
+
+## 5. Tactical HUD + Exit + Icon Fixes (latest round)
+
+### 5.1 Tactical HUD Header (MainScreen)
+**File:** `ui/MainScreen.kt`
+Replaced the centered "NullFlow" + tagline with a top-left asymmetrical HUD
+(mimics command-line / aviation HUD / security-software aesthetics):
+- **"NULLFLOW"** all-caps, `FontWeight.Black`, `letterSpacing = 2.sp`, 22sp.
+- **Status line:** 6dp circular node + monospace `Text` (`FontFamily.Monospace`,
+  11sp). State-driven by `isShieldActive`:
+  - **ON:** cyan `#00E5FF` node with `shadow(blur=8dp)` glow + `SYS.STATUS: SECURE`.
+  - **OFF:** muted grey `#4A4E58` node (no glow) + `SYS.STATUS: STANDBY` (`#8A8F99`).
+- `statusBarsPadding()` for notch/cutout safety. Animated color/glow (400ms).
+- 40dp guaranteed min gap to the Hero Switch.
+
+### 5.2 Exit Dialog (was "Minimize")
+**File:** `MainActivity.kt`
+- "Minimize" → **"Exit"**. Rationale: "Minimize" made no sense (the user can
+  just switch apps); "Exit" fully tears down.
+- On Exit: sends `ACTION_STOP` to `FocusVpnService` (stops shield + ends session
+  + cleans Room + removes notification — idempotent), then `finishAffinity()` to
+  close the app completely.
+- Dialog text: "This stops the shield and closes the app completely. Your focus
+  data is saved on this phone."
+
+### 5.3 App Picker Icon Placeholder
+**File:** `ui/AppPickerSheet.kt` (`TactileAppCard`)
+- **Root cause:** `rememberAppIconPainter` returns a transparent `ColorPainter`
+  until the bitmap loads on `Dispatchers.IO`, so the icon slot appeared empty
+  until the user tapped the card (recomposition after load).
+- **Fix:** added a visible 40dp placeholder circle BEHIND the async-loaded icon.
+  The slot always shows a dark circle while the bitmap loads; the icon fades in
+  on top when ready.
 
 ---
 
@@ -214,3 +249,10 @@ payload (strict zero-data privacy — never inspected/logged/stored).
   - Home screen shows blocked-app icon row under the profile name + fades right.
   - Onboarding (API 33+): cyan "Pin to Quick Settings" button → system dialog →
     tile appears → button flips to "Added". Haptic tick + engage.
+  - MainScreen HUD header: top-left "NULLFLOW" + status line. ON → cyan glow +
+    "SYS.STATUS: SECURE"; OFF → grey + "SYS.STATUS: STANDBY". No notch/cutout
+    overlap.
+  - Back button → "Exit NullFlow?" dialog → Exit stops shield + closes app;
+    Stay dismisses.
+  - App picker: icons show a placeholder circle immediately (not empty) while
+    loading; icon fades in on top.

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -44,8 +45,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusProfile
@@ -185,124 +188,134 @@ fun MainScreen(
             .fillMaxSize()
             .background(bgColor)
     ) {
+        // Root Column: fillMaxSize. The top half gets weight(1f) so it takes
+        // ALL remaining space and stops exactly where the bottom dashboard
+        // begins. The dashboard is anchored below with NO weight, so it is
+        // pinned to the bottom edge and can never be pushed off-screen by the
+        // (unconstrained) middle content.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 28.dp)
         ) {
-            Spacer(Modifier.height(48.dp))
-
-            // Wordmark
-            Text(
-                text = "NullFlow",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f)
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Disconnect on your terms.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            // ---- THE HERO TOGGLE ----
-            HeroToggle(
-                isActive = isActive,
-                onClick = { onToggle() }
-            )
-
-            Spacer(Modifier.height(28.dp))
-
-            // Status line
-            Text(
-                text = if (isActive) "Shield active" else "Shield off",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                color = if (isActive)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
-
-            // Active profile name + edit
-            if (effectiveProfile != null) {
-                val profile = effectiveProfile
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable {
-                        onOpenPicker(profile.id)
-                    }
-                ) {
-                    Text(
-                        text = profile.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (blockedCount > 0)
-                            "$blockedCount app${if (blockedCount == 1) "" else "s"} shielded"
-                        else "No apps yet",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (blockedCount > 0)
-                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                        else
-                            MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Edit apps",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                // ---- Blocked-app icon row (transparency: see exactly what's
-                // shielded) — mirrors the QS tile panel's icon row. ----
-                if (blockedCount > 0) {
-                    Spacer(Modifier.height(12.dp))
-                    BlockedAppIconRow(
-                        context = context,
-                        apps = blockedApps,
-                        bg = bgColor
-                    )
-                }
-            } else {
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    text = "No focus mode yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+            // ---- 1. TOP HALF (dynamic space — takes remaining height) ----
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // ---- Tactical HUD header (top-left, asymmetrical) ----
+                // Mimics command-line / aviation HUD aesthetics: brand + live
+                // system status anchored to the top-left edge.
+                HudHeader(
+                    isShieldActive = isActive
                 )
-                Spacer(Modifier.height(12.dp))
-                // Fresh install: give a clear way to pick apps BEFORE toggling on.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                        .clickable {
-                            val profileId = createDefaultProfile(dao)
-                            onOpenPicker(profileId)
+
+                // Guaranteed minimum gap between the HUD header and the Hero
+                // Switch (the weight(1f) spacer below absorbs any extra space).
+                Spacer(Modifier.height(40.dp))
+
+                Spacer(Modifier.weight(1f))
+
+                // ---- THE HERO TOGGLE ----
+                HeroToggle(
+                    isActive = isActive,
+                    onClick = { onToggle() }
+                )
+
+                Spacer(Modifier.height(28.dp))
+
+                // Status line
+                Text(
+                    text = if (isActive) "Shield active" else "Shield off",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isActive)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+
+                // Active profile name + edit
+                if (effectiveProfile != null) {
+                    val profile = effectiveProfile
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            onOpenPicker(profile.id)
                         }
-                        .padding(horizontal = 18.dp, vertical = 12.dp)
-                ) {
+                    ) {
+                        Text(
+                            text = profile.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (blockedCount > 0)
+                                "$blockedCount app${if (blockedCount == 1) "" else "s"} shielded"
+                            else "No apps yet",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (blockedCount > 0)
+                                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                            else
+                                MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Edit apps",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // ---- Blocked-app icon row (transparency: see exactly what's
+                    // shielded) — mirrors the QS tile panel's icon row. ----
+                    if (blockedCount > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        BlockedAppIconRow(
+                            context = context,
+                            apps = blockedApps,
+                            bg = bgColor
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.height(14.dp))
                     Text(
-                        text = "Choose apps to shield",
+                        text = "No focus mode yet",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                     )
+                    Spacer(Modifier.height(12.dp))
+                    // Fresh install: give a clear way to pick apps BEFORE toggling on.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .clickable {
+                                val profileId = createDefaultProfile(dao)
+                                onOpenPicker(profileId)
+                            }
+                            .padding(horizontal = 18.dp, vertical = 12.dp)
+                    ) {
+                        Text(
+                            text = "Choose apps to shield",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
+
+                Spacer(Modifier.weight(1f))
             }
 
-            Spacer(Modifier.weight(1f))
-
+            // ---- 2. BOTTOM HALF (anchored dashboard — NO weight) ----
+            // Pinned to the bottom edge. The top half's weight(1f) absorbs all
+            // extra space, so this block can never be pushed off-screen.
             if (isActive) {
                 // ---- Active: live session stats ----
                 StatsRow(
@@ -324,6 +337,86 @@ fun MainScreen(
             }
 
             Spacer(Modifier.height(40.dp))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tactical HUD Header — top-left brand + live system status
+// ---------------------------------------------------------------------------
+//
+// Replaces the old centered "NullFlow" + tagline. Asymmetrical top-left
+// alignment mimics command-line / aviation HUD / security-software aesthetics.
+// The status line is state-driven: cyan "SECURE" when the shield is active,
+// muted grey "STANDBY" when off.
+//
+// Uses statusBarsPadding() to avoid the notch / camera cutout / status bar.
+
+@Composable
+private fun HudHeader(isShieldActive: Boolean) {
+    // Status colors (state-driven).
+    val nodeColor = if (isShieldActive) Color(0xFF00E5FF) else Color(0xFF4A4E58)
+    val textColor = if (isShieldActive) Color(0xFF00E5FF) else Color(0xFF8A8F99)
+    val statusText = if (isShieldActive) "SYS.STATUS: SECURE" else "SYS.STATUS: STANDBY"
+
+    // Animate the node color + glow so the transition feels alive.
+    val animatedNodeColor by animateColorAsState(
+        targetValue = nodeColor,
+        animationSpec = tween(400),
+        label = "hudNode"
+    )
+    val animatedTextColor by animateColorAsState(
+        targetValue = textColor,
+        animationSpec = tween(400),
+        label = "hudText"
+    )
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isShieldActive) 0.6f else 0f,
+        animationSpec = tween(400),
+        label = "hudGlow"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+    ) {
+        // Main brand: "NULLFLOW" all-caps, heavy weight, wide letter spacing.
+        Text(
+            text = "NULLFLOW",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 2.sp,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.92f)
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        // Dynamic status line: glowing node + monospace status text.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Status node (6dp circle). Glows cyan when active.
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(animatedNodeColor)
+                    .shadow(
+                        elevation = if (isShieldActive) 8.dp else 0.dp,
+                        shape = CircleShape,
+                        ambientColor = Color(0xFF00E5FF).copy(alpha = glowAlpha),
+                        spotColor = Color(0xFF00E5FF).copy(alpha = glowAlpha)
+                    )
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = statusText,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.5.sp,
+                color = animatedTextColor
+            )
         }
     }
 }
