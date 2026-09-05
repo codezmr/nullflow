@@ -28,6 +28,13 @@ object Haptics {
         }
     }
 
+    /**
+     * Expose the system [Vibrator] so callers can fire custom
+     * [VibrationEffect.Composition] patterns (e.g., the SwipeToArmSlider's
+     * heavy "arm" thud). Returns null if no vibrator is available.
+     */
+    fun vibratorFor(context: Context): Vibrator? = vibrator(context)
+
     fun tick(context: Context) {
         vibrator(context)?.vibrate(VibrationEffect.createOneShot(50, 150))
     }

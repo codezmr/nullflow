@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
+import android.os.VibrationEffect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -16,6 +17,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,23 +36,33 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlin.math.roundToInt
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -160,6 +173,42 @@ fun OnboardingScreen(
 
     val allGranted = hasNotificationPerm && hasVpnPerm
 
+    // ---- Real-time permission observation ----
+    // When the user returns from a system settings/consent screen (ON_RESUME),
+    // re-check BOTH permissions so the UI instantly reflects the new state and
+    // the SwipeToArmSlider unlocks without a manual refresh.
+    //
+    //  - Notifications: checkSelfPermission (no side effects).
+    //  - VPN: VpnService.prepare(context) == null. prepare() is a non-launching
+    //    check when already-authorized (returns null); it only returns an Intent
+    //    (the consent dialog) when NOT yet authorized — and we don't launch it
+    //    here, we just read the null/non-null result.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Re-check notifications (Android 13+ only; pre-33 always granted).
+                if (Build.VERSION.SDK_INT >= 33) {
+                    val granted = context.checkSelfPermission(
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted != hasNotificationPerm) {
+                        hasNotificationPerm = granted
+                        if (granted) Haptics.engage(context)
+                    }
+                }
+                // Re-check VPN readiness.
+                val vpnReady = VpnService.prepare(context) == null
+                if (vpnReady != hasVpnPerm) {
+                    hasVpnPerm = vpnReady
+                    if (vpnReady) Haptics.engage(context)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // Version + year (for the footer).
     val versionName = remember {
         try {
@@ -242,28 +291,33 @@ fun OnboardingScreen(
 
             Spacer(Modifier.height(30.dp))
 
-            // ---- Section label ----
-            SectionLabel("How it works")
+            // ---- Section label (elite terminology) ----
+            SectionLabel("System Protocols")
 
             Spacer(Modifier.height(14.dp))
 
-            // ---- How it works (3 rich feature cards) ----
+            // ---- System Protocols (3 dimmed informational cards) ----
+            // Dimmed on purpose: these are informational, NOT the interactive
+            // setup requirements below. The permission rows glow to draw the eye.
             FeatureCard(
                 icon = "◉",
-                title = "Pick the apps to silence",
-                desc = "Choose any apps. They go dark — everything else stays connected."
+                title = "Targeted Interception",
+                desc = "Choose any apps. They go dark — everything else stays connected.",
+                dimmed = true
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             FeatureCard(
                 icon = "⚡",
-                title = "One tap, zero popups",
-                desc = "Flip the switch. The shield engages instantly, right on this phone."
+                title = "Tactical Deployment",
+                desc = "Flip the switch. The shield engages instantly, right on this phone.",
+                dimmed = true
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             FeatureCard(
                 icon = "✦",
-                title = "Your data never moves",
-                desc = "No servers, no accounts, no tracking. It all stays on your device."
+                title = "Zero-Leak Architecture",
+                desc = "No servers, no accounts, no tracking. It all stays on your device.",
+                dimmed = true
             )
 
             // ---- Permission checklist (ONLY show what's still needed) ----
@@ -292,7 +346,7 @@ fun OnboardingScreen(
                         }
                     }
                 )
-                if (needsVpn) Spacer(Modifier.height(14.dp))
+                if (needsVpn) Spacer(Modifier.height(8.dp))
             }
 
             if (needsVpn) {
@@ -335,11 +389,13 @@ fun OnboardingScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            // ---- Gatekeeper button ----
-            GatekeeperButton(
-                allGranted = allGranted,
-                onClick = {
-                    Haptics.engage(context)
+            // ---- The Final Gatekeeper: SwipeToArmSlider ----
+            // Replaces the old "Complete Setup" button. Locked until both
+            // permissions are granted; then the user physically drags the thumb
+            // to "arm" the shield (psychological commitment).
+            SwipeToArmSlider(
+                unlocked = allGranted,
+                onArmed = {
                     Settings.get(context).markOnboarded()
                     onEnter()
                 }
@@ -454,12 +510,29 @@ private fun SectionLabel(text: String) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun FeatureCard(icon: String, title: String, desc: String) {
+private fun FeatureCard(
+    icon: String,
+    title: String,
+    desc: String,
+    /**
+     * When true, the card is visually dimmed (lower alpha, muted icon) so it
+     * reads as informational — NOT the interactive setup requirements. The
+     * permission rows below glow cyan to carry the visual weight instead.
+     */
+    dimmed: Boolean = false
+) {
+    // Dim the whole card when informational.
+    val cardAlpha = if (dimmed) 0.55f else 1f
+    val iconColor = if (dimmed) IcyBlue.copy(alpha = 0.4f) else IcyBlue
+    val titleColor = if (dimmed) StarkWhite.copy(alpha = 0.6f) else StarkWhite.copy(alpha = 0.95f)
+    val descColor = if (dimmed) StarkWhite.copy(alpha = 0.35f) else StarkWhite.copy(alpha = 0.55f)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(cardAlpha)
             .clip(RoundedCornerShape(20.dp))
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(20.dp))
+            .shadow(elevation = if (dimmed) 4.dp else 8.dp, shape = RoundedCornerShape(20.dp))
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(Color(0xFF14141A), Color(0xFF0E0E12))
@@ -478,10 +551,10 @@ private fun FeatureCard(icon: String, title: String, desc: String) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(IcyBlue.copy(alpha = 0.12f))
+                .background(IcyBlue.copy(alpha = if (dimmed) 0.06f else 0.12f))
                 .border(
                     width = 1.dp,
-                    color = IcyBlue.copy(alpha = 0.25f),
+                    color = IcyBlue.copy(alpha = if (dimmed) 0.12f else 0.25f),
                     shape = RoundedCornerShape(14.dp)
                 ),
             contentAlignment = Alignment.Center
@@ -489,7 +562,7 @@ private fun FeatureCard(icon: String, title: String, desc: String) {
             Text(
                 text = icon,
                 style = MaterialTheme.typography.titleMedium,
-                color = IcyBlue
+                color = iconColor
             )
         }
         Spacer(Modifier.width(16.dp))
@@ -498,13 +571,13 @@ private fun FeatureCard(icon: String, title: String, desc: String) {
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = StarkWhite.copy(alpha = 0.95f)
+                color = titleColor
             )
             Spacer(Modifier.height(3.dp))
             Text(
                 text = desc,
                 style = MaterialTheme.typography.bodySmall,
-                color = StarkWhite.copy(alpha = 0.55f),
+                color = descColor,
                 lineHeight = 17.sp
             )
         }
@@ -717,11 +790,13 @@ private fun NeumorphicChecklistItem(
     isChecked: Boolean,
     onClick: () -> Unit
 ) {
+    // Incomplete: subtle #222733 border. Complete: glowing cyan #00E5FF border.
     val borderColor by animateColorAsState(
-        targetValue = if (isChecked) NeonCyan else MutedGrey,
+        targetValue = if (isChecked) NeonCyan else Color(0xFF222733),
         animationSpec = tween(350),
         label = "border"
     )
+    // Glow shadow behind the row when complete (the "glow" effect).
     val glowAlpha by animateFloatAsState(
         targetValue = if (isChecked) 0.55f else 0f,
         animationSpec = tween(350),
@@ -732,13 +807,28 @@ private fun NeumorphicChecklistItem(
         animationSpec = tween(350, easing = FastOutSlowInEasing),
         label = "checkScale"
     )
+    // Text dims slightly on completion (indicates "done, move on").
+    val titleAlpha by animateFloatAsState(
+        targetValue = if (isChecked) 0.6f else 0.9f,
+        animationSpec = tween(350),
+        label = "titleAlpha"
+    )
+    val descAlpha by animateFloatAsState(
+        targetValue = if (isChecked) 0.3f else 0.45f,
+        animationSpec = tween(350),
+        label = "descAlpha"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
+            // Glow: a soft cyan shadow that fades in when complete.
             .shadow(
-                elevation = if (isChecked) 10.dp else 5.dp,
-                shape = RoundedCornerShape(22.dp)
+                elevation = if (isChecked) 12.dp else 4.dp,
+                shape = RoundedCornerShape(22.dp),
+                ambientColor = NeonCyan.copy(alpha = glowAlpha),
+                spotColor = NeonCyan.copy(alpha = glowAlpha)
             )
             .background(
                 brush = if (isChecked)
@@ -771,6 +861,7 @@ private fun NeumorphicChecklistItem(
             contentAlignment = Alignment.Center
         ) {
             if (isChecked) {
+                // Solid cyan circle with a checkmark.
                 Canvas(
                     modifier = Modifier
                         .size(18.dp)
@@ -791,13 +882,14 @@ private fun NeumorphicChecklistItem(
                     )
                 }
             } else {
+                // Hollow circle (incomplete).
                 Box(
                     modifier = Modifier
                         .size(14.dp)
                         .clip(CircleShape)
                         .border(
                             width = 2.dp,
-                            color = MutedGrey,
+                            color = Color(0xFF222733),
                             shape = CircleShape
                         )
                 )
@@ -811,13 +903,13 @@ private fun NeumorphicChecklistItem(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isChecked) StarkWhite else StarkWhite.copy(alpha = 0.8f)
+                color = StarkWhite.copy(alpha = titleAlpha)
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = StarkWhite.copy(alpha = 0.45f)
+                color = StarkWhite.copy(alpha = descAlpha)
             )
         }
 
@@ -834,62 +926,191 @@ private fun NeumorphicChecklistItem(
 }
 
 // ---------------------------------------------------------------------------
-// Gatekeeper button — flat ghost → elevated electric blue
+// SwipeToArmSlider — the Final Gatekeeper
 // ---------------------------------------------------------------------------
+//
+// Replaces the old "Complete Setup" button. A tactile slider the user must
+// physically drag to "arm" the shield after granting system permissions.
+//
+//  - LOCKED (permissions missing): dark grey track (#1A1D24), text
+//    "[ SYSTEM LOCKED ]", thumb cannot be dragged.
+//  - UNLOCKED (permissions granted): cyan gradient track, text
+//    "> SWIPE TO ARM >". Dragging the thumb right fires continuous haptic
+//    feedback (detent-based). At the 90% threshold: heavy VibrationEffect.
+//    Composition, thumb locks in place, onArmed() is called.
+//
+// Slider math: drag offset clamped between 0f and (trackWidth - thumbWidth).
 
 @Composable
-private fun GatekeeperButton(allGranted: Boolean, onClick: () -> Unit) {
-    // Gentle pulse when active (Animatable ping-pong; infiniteTransition
-    // .animateFloat is not available in Compose 1.6.1).
-    val pulse = remember { Animatable(1f) }
-    LaunchedEffect(allGranted) {
-        if (allGranted) {
-            while (true) {
-                pulse.animateTo(
-                    targetValue = 1.025f,
-                    animationSpec = tween(1100, easing = FastOutSlowInEasing)
-                )
-                pulse.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(1100, easing = FastOutSlowInEasing)
-                )
-            }
-        } else {
-            pulse.snapTo(1f)
+private fun SwipeToArmSlider(
+    unlocked: Boolean,
+    onArmed: () -> Unit
+) {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+
+    // Thumb travel (px). Updated on each layout pass.
+    var maxTravel by remember { mutableStateOf(0f) }
+    // Current thumb offset (px).
+    var thumbOffset by remember { mutableStateOf(0f) }
+    // Whether the arm has fired (locks the thumb + prevents re-trigger).
+    var armed by remember { mutableStateOf(false) }
+    // Last detent index fired (for detent-based haptics).
+    var lastDetent by remember { mutableStateOf(-1) }
+
+    // Reset when the lock state changes (e.g., permissions just granted).
+    LaunchedEffect(unlocked) {
+        if (unlocked) {
+            thumbOffset = 0f
+            armed = false
+            lastDetent = -1
         }
     }
 
-    val containerColor by animateColorAsState(
-        targetValue = if (allGranted) ElectricBlue else SurfaceDark,
-        animationSpec = tween(450),
-        label = "gateBg"
-    )
-    val textColor by animateColorAsState(
-        targetValue = if (allGranted) Color.White else StarkWhite.copy(alpha = 0.3f),
-        animationSpec = tween(450),
-        label = "gateText"
-    )
+    val thumbSize = 56.dp
+    val trackHeight = 64.dp
+    val density = LocalDensity.current
+
+    // Detent-based haptics: fire TextHandleMove every ~15% of travel.
+    fun fireDetentHaptic(offset: Float, max: Float) {
+        if (max <= 0f) return
+        val fraction = offset / max
+        val detent = (fraction / 0.15f).toInt()
+        if (detent != lastDetent) {
+            lastDetent = detent
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+
+    // Heavy "arm" vibration.
+    // NOTE: VibrationEffect.Composition is package-private (not accessible to
+    // app code), so we use the public createWaveform() API instead — a
+    // [off, on, off, on, off, on] pattern that produces a heavy "thud-tick-thud"
+    // feel (the closest public equivalent to a Composition of THUD/TICK/THUD).
+    fun fireArmVibration() {
+        val vibrator = Haptics.vibratorFor(context) ?: return
+        // Waveform: [initialDelay, on, off, on, off, on] in ms.
+        val waveform = longArrayOf(0L, 80L, 40L, 120L, 40L, 60L)
+        val amplitudes = intArrayOf(
+            VibrationEffect.DEFAULT_AMPLITUDE,
+            VibrationEffect.DEFAULT_AMPLITUDE,
+            0,
+            VibrationEffect.DEFAULT_AMPLITUDE,
+            0,
+            VibrationEffect.DEFAULT_AMPLITUDE
+        )
+        val effect = VibrationEffect.createWaveform(waveform, amplitudes, -1)
+        vibrator.vibrate(effect)
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .scale(if (allGranted) pulse.value else 1f)
+            .height(trackHeight)
+            // Measure the track to compute maxTravel = trackWidth - thumbWidth - padding.
+            .onGloballyPositioned { coords ->
+                val trackWidthPx = coords.size.width.toFloat()
+                val thumbWidthPx = with(density) { thumbSize.toPx() }
+                val paddingPx = with(density) { 8.dp.toPx() } // 4.dp start + 4.dp end
+                maxTravel = (trackWidthPx - thumbWidthPx - paddingPx).coerceAtLeast(0f)
+            }
             .clip(RoundedCornerShape(20.dp))
-            .shadow(
-                elevation = if (allGranted) 12.dp else 4.dp,
+            // Track background: dark grey when locked, cyan gradient when unlocked.
+            .background(
+                brush = if (unlocked)
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            NeonCyan.copy(alpha = 0.12f),
+                            NeonCyan.copy(alpha = 0.22f)
+                        )
+                    )
+                else
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFF1A1D24), Color(0xFF1A1D24))
+                    )
+            )
+            .border(
+                width = 1.dp,
+                color = if (unlocked) NeonCyan.copy(alpha = 0.5f) else Color(0xFF222733),
                 shape = RoundedCornerShape(20.dp)
             )
-            .background(containerColor)
-            .clickable(enabled = allGranted, onClick = onClick)
-            .height(60.dp),
+            .shadow(
+                elevation = if (unlocked) 8.dp else 3.dp,
+                shape = RoundedCornerShape(20.dp),
+                ambientColor = if (unlocked) NeonCyan.copy(alpha = 0.3f) else Color.Transparent,
+                spotColor = if (unlocked) NeonCyan.copy(alpha = 0.3f) else Color.Transparent
+            ),
         contentAlignment = Alignment.Center
     ) {
+        // Track label (centered, behind the thumb).
         Text(
-            text = if (allGranted) "Enter NullFlow" else "Complete Setup",
-            fontSize = 17.sp,
+            text = if (unlocked) "> SWIPE TO ARM >" else "[ SYSTEM LOCKED ]",
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
-            color = textColor
+            letterSpacing = 1.5.sp,
+            color = if (unlocked) NeonCyan.copy(alpha = 0.8f) else StarkWhite.copy(alpha = 0.25f)
         )
+
+        // The draggable thumb.
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 4.dp)
+                .size(thumbSize)
+                .offset {
+                    // Convert px offset to IntOffset.
+                    androidx.compose.ui.unit.IntOffset(thumbOffset.roundToInt(), 0)
+                }
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    brush = if (unlocked)
+                        Brush.linearGradient(
+                            colors = listOf(NeonCyan, Color(0xFF00B8D4))
+                        )
+                    else
+                        Brush.linearGradient(
+                            colors = listOf(Color(0xFF2A2F3A), Color(0xFF1E222B))
+                        )
+                )
+                .shadow(
+                    elevation = if (unlocked) 10.dp else 4.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = if (unlocked) NeonCyan.copy(alpha = 0.4f) else Color.Transparent,
+                    spotColor = if (unlocked) NeonCyan.copy(alpha = 0.4f) else Color.Transparent
+                )
+                .pointerInput(unlocked, armed) {
+                    if (unlocked && !armed) {
+                        detectHorizontalDragGestures(
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                // New offset, clamped to [0, maxTravel].
+                                val newOffset = (thumbOffset + dragAmount)
+                                    .coerceIn(0f, maxTravel)
+                                thumbOffset = newOffset
+                                // Detent-based haptic feedback.
+                                fireDetentHaptic(newOffset, maxTravel)
+                                // 90% threshold → arm.
+                                if (maxTravel > 0f && newOffset >= maxTravel * 0.9f && !armed) {
+                                    armed = true
+                                    // Snap the thumb to the end.
+                                    thumbOffset = maxTravel
+                                    fireArmVibration()
+                                    onArmed()
+                                }
+                            }
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            // Thumb icon: a right-pointing chevron (unlocked) or a lock (locked).
+            Text(
+                text = if (unlocked) "›" else "🔒",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (unlocked) Color(0xFF0A0C10) else StarkWhite.copy(alpha = 0.4f)
+            )
+        }
     }
 }
 

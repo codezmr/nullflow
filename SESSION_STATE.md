@@ -15,7 +15,65 @@
 
 ---
 
-## ✅ Current Status: BUILT — Premium Analytics Command Center + Shareable Dossier
+## ✅ Current Status: BUILT — Welcome Screen "Initiation Sequence"
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero new warnings):**
+`NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### What changed (this round — approved by Zamir)
+The onboarding screen is now an "Initiation Sequence": elite copy, glowing
+permission states, and a tactile `SwipeToArmSlider` replacing the old button.
+
+1. **Copy & spacing** (`OnboardingScreen.kt`):
+   - "How it works" → **"SYSTEM PROTOCOLS"**.
+   - Feature card titles: "Pick the apps to silence" → **"Targeted
+     Interception"**, "One tap, zero popups" → **"Tactical Deployment"**,
+     "Your data never moves" → **"Zero-Leak Architecture"**.
+   - Spacing between info cards: 12.dp → **8.dp**.
+   - Info cards now **dimmed** (`FeatureCard(dimmed = true)`: 0.55 alpha, muted
+     icon/title/desc) so the glowing permission rows carry the visual weight.
+2. **Permission rows** (`NeumorphicChecklistItem`):
+   - Incomplete: subtle `#222733` border + hollow circle.
+   - Complete: **glowing cyan `#00E5FF` border** (cyan ambient/spot shadow) +
+     solid cyan circle with checkmark + text **dims** (title 0.9→0.6, desc
+     0.45→0.3 alpha) to signal "done".
+3. **Real-time permission observation** (`DisposableEffect` +
+   `LifecycleEventObserver` on `ON_RESUME`): re-checks BOTH notifications
+   (`checkSelfPermission`) and VPN (`VpnService.prepare(context) == null`) when
+   the user returns from system settings → slider unlocks instantly.
+4. **`SwipeToArmSlider`** (NEW composable, replaces `GatekeeperButton`):
+   - **Locked** (perms missing): dark grey `#1A1D24` track, `[ SYSTEM LOCKED ]`,
+     thumb not draggable.
+   - **Unlocked** (perms granted): cyan gradient track, `> SWIPE TO ARM >`.
+   - Drag: `detectHorizontalDragGestures`, offset clamped to
+     `[0, trackWidth - thumbWidth - padding]` (measured via
+     `onGloballyPositioned` + `LocalDensity`).
+   - **Detent-based haptics**: `TextHandleMove` every ~15% of travel (not every
+     frame — avoids haptic machine-gun).
+   - **90% threshold**: heavy `VibrationEffect.createWaveform` thud (THUD/TICK/
+     THUD pattern), thumb snaps to end, `onArmed()` → `markOnboarded()` +
+     `onEnter()`.
+   - `Haptics.vibratorFor(context)` exposed (new public method) for the custom
+     waveform.
+   - ⚠️ **API note:** `VibrationEffect.Composition` is package-private (not
+     accessible to app code) — used public `createWaveform()` instead (closest
+     equivalent).
+
+### ⚠️ Still to verify on device (Motorola Edge 40 / Android 15 = API 35)
+- Onboarding shows "SYSTEM PROTOCOLS" + the 3 new card titles (dimmed).
+- Permission rows: hollow circle + grey border when pending; glowing cyan border
+  + solid check + dimmed text when granted.
+- Granting a permission via system settings → return to app → row updates
+  instantly (ON_RESUME recheck) + slider unlocks.
+- Slider: locked (grey, "[ SYSTEM LOCKED ]") until both perms granted.
+- Unlocked: cyan track, "> SWIPE TO ARM >". Drag → detent haptics. At 90% →
+  heavy thud + navigate to MainScreen.
+- (Command Center + radar + dossier + HUD + QS pinning from previous commits
+  still working.)
+
+---
+
+## ✅ Previous: Premium Analytics Command Center + Shareable Dossier
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
