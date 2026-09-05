@@ -19,7 +19,7 @@
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):**
 `NullFlow.apk` (32 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
-**UNCOMMITTED** — working tree has the telemetry changes staged for review.
+**Committed** as `6e5c729` (14 files, +948/−468). Working tree clean.
 
 ### What changed (this round)
 The basic stats view is replaced by a **Focus Telemetry Console** — a
