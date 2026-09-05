@@ -118,8 +118,15 @@ private data class Tip(val tag: String, val text: String)
  *  - Gatekeeper: flat ghost button → elevates + electric blue when complete.
  */
 @Composable
-fun OnboardingScreen(onEnter: () -> Unit) {
+fun OnboardingScreen(
+    onEnter: () -> Unit,
+    onRequestAddQsTile: ((Boolean) -> Unit) -> Unit = {}
+) {
     val context = LocalContext.current
+
+    // ---- Quick Settings tile-pinning state (Android 13+ only) ----
+    var tileAdded by remember { mutableStateOf(false) }
+    var tileRequesting by remember { mutableStateOf(false) }
 
     // ---- Permission state (real-time) ----
     // (pre-Android 13: notifications are always allowed → true)
@@ -308,6 +315,25 @@ fun OnboardingScreen(onEnter: () -> Unit) {
             }
 
             Spacer(Modifier.height(34.dp))
+
+            // ---- Optional: pin the GhostShield Quick Settings tile ----
+            // Highly recommended (1-tap access) but never blocks onboarding.
+            QsTilePinSection(
+                tileAdded = tileAdded,
+                tileRequesting = tileRequesting,
+                onPinClick = {
+                    if (tileAdded || tileRequesting) return@QsTilePinSection
+                    Haptics.tick(context)
+                    tileRequesting = true
+                    onRequestAddQsTile { added ->
+                        tileAdded = added
+                        tileRequesting = false
+                        if (added) Haptics.engage(context)
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(28.dp))
 
             // ---- Gatekeeper button ----
             GatekeeperButton(
@@ -864,5 +890,118 @@ private fun GatekeeperButton(allGranted: Boolean, onClick: () -> Unit) {
             fontWeight = FontWeight.SemiBold,
             color = textColor
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Optional Quick Settings tile-pinning section (above the gatekeeper button)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Highly Recommended for Seamless Use" — offers a 1-tap pin of the
+ * GhostShield Quick Settings tile.
+ *
+ *  - Android 13+ (TIRAMISU): an electric-cyan outlined button that calls the
+ *    native `requestAddTileService` API. On success it flips to a dimmed
+ *    "Added" state.
+ *  - Android 10-12 (fallback): a muted glassmorphic card with manual
+ *    drag-and-drop instructions.
+ *
+ * This section is OPTIONAL — it never blocks the user from entering the app.
+ */
+@Composable
+private fun QsTilePinSection(
+    tileAdded: Boolean,
+    tileRequesting: Boolean,
+    onPinClick: () -> Unit
+) {
+    val isTiramisu = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Section header
+        Text(
+            text = "Highly Recommended for Seamless Use",
+            color = StarkWhite.copy(alpha = 0.55f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(bottom = 10.dp)
+        )
+
+        if (isTiramisu) {
+            // ---- API 33+: 1-tap native pin button ----
+            val bg by animateColorAsState(
+                targetValue = if (tileAdded)
+                    NeonCyan.copy(alpha = 0.10f)
+                else
+                    SurfaceDark,
+                animationSpec = tween(350),
+                label = "pinBg"
+            )
+            val border by animateColorAsState(
+                targetValue = if (tileAdded)
+                    NeonCyan.copy(alpha = 0.4f)
+                else
+                    NeonCyan,
+                animationSpec = tween(350),
+                label = "pinBorder"
+            )
+            val text by animateColorAsState(
+                targetValue = if (tileAdded)
+                    NeonCyan.copy(alpha = 0.5f)
+                else
+                    NeonCyan,
+                animationSpec = tween(350),
+                label = "pinText"
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, border, RoundedCornerShape(16.dp))
+                    .background(bg)
+                    .clickable(enabled = !tileAdded && !tileRequesting, onClick = onPinClick)
+                    .height(54.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (tileAdded) "✓" else "⚡",
+                        fontSize = 16.sp,
+                        color = text
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = when {
+                            tileAdded -> "Added to Quick Settings"
+                            tileRequesting -> "Adding…"
+                            else -> "Pin to Quick Settings"
+                        },
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = text
+                    )
+                }
+            }
+        } else {
+            // ---- API 30-32: manual instructions (glassmorphic card) ----
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(StarkWhite.copy(alpha = 0.06f))
+                    .border(1.dp, StarkWhite.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    text = "Pro Tip: Swipe down your notification shade, tap Edit, and drag " +
+                        "GhostShield to your active tiles for 1-tap zero-friction access.",
+                    color = StarkWhite.copy(alpha = 0.55f),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
     }
 }

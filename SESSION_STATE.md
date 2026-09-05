@@ -15,7 +15,40 @@
 
 ---
 
-## ✅ Current Status: BUILT — "Pings Deflected" HUD + Packet Counter
+## ✅ Current Status: BUILT — 1-Tap QS Tile Pinning (onboarding) + HUD
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### What changed (this round — approved by Zamir)
+1. **1-tap QS tile pinning** (`MainActivity.kt`): new public
+   `requestAddQsTile(onResult: (Boolean) -> Unit)` — gated behind
+   `Build.VERSION.SDK_INT >= TIRAMISU` (33). Uses
+   `StatusBarManager.requestAddTileService(ComponentName, "GhostShield",
+   Icon, mainExecutor, Consumer<Int>)`. Callback result code 0 = added,
+   non-zero = dismissed. Dependency-free main-thread `Executor` (Handler on
+   main looper). Pre-33 → reports `false` (onboarding shows fallback card).
+2. **Onboarding tile section** (`OnboardingScreen.kt`): new
+   `QsTilePinSection` composable injected ABOVE the gatekeeper button.
+   Header: "Highly Recommended for Seamless Use".
+   - **API 33+:** electric-cyan (`NeonCyan` #00E5FF) outlined button
+     "[ ⚡ Pin to Quick Settings ]". On tap → haptic tick + `requestAddQsTile`.
+     On success → flips to dimmed "✓ Added to Quick Settings" + haptic engage.
+   - **API 30-32 fallback:** muted glassmorphic card with manual
+     drag-and-drop instructions.
+   - NEVER blocks onboarding (optional).
+3. **OnboardingScreen signature** now takes
+   `onRequestAddQsTile: ((Boolean) -> Unit) -> Unit` (wired from MainActivity).
+
+### ⚠️ Still to verify on device (Motorola Edge 40 / Android 15 = API 35)
+- Onboarding shows the cyan "Pin to Quick Settings" button above "Enter NullFlow".
+- Tapping it → system dialog → tile appears in QS → button flips to "Added".
+- Haptic tick on tap + engage on success.
+- (HUD + packet counter from previous commit still working.)
+
+---
+
+## ✅ Previous: "Pings Deflected" HUD + Packet Counter
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.

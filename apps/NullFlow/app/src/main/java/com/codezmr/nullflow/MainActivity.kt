@@ -1,5 +1,9 @@
 package com.codezmr.nullflow
 
+import android.content.ComponentName
+import android.graphics.drawable.Icon
+import android.app.StatusBarManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -110,10 +114,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (showOnboarding) {
-                    OnboardingScreen(onEnter = {
-                        AppLog.d("onboarding complete → entering main screen")
-                        showOnboarding = false
-                    })
+                    OnboardingScreen(
+                        onEnter = {
+                            AppLog.d("onboarding complete → entering main screen")
+                            showOnboarding = false
+                        },
+                        onRequestAddQsTile = { onResult ->
+                            requestAddQsTile(onResult)
+                        }
+                    )
                 } else {
                     // Picker sheet state lives here so MainScreen can open it.
                     var pickerProfileId by remember { mutableStateOf<Long?>(null) }
@@ -151,6 +160,49 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         AppLog.d("MainActivity.onDestroy")
         super.onDestroy()
+    }
+
+    /**
+     * Request the system to add the GhostShield Quick Settings tile (1-tap,
+     * no manual drag-and-drop). Android 13+ (TIRAMISU) only — older versions
+     * must pin the tile manually (the onboarding shows a fallback card there).
+     *
+     * @param onResult called on the main thread with `true` if the user
+     *   confirmed the add, `false` if they dismissed it (or on pre-33 where
+     *   the API is unavailable — the caller should treat that as "skip").
+     */
+    fun requestAddQsTile(onResult: (Boolean) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            AppLog.d("requestAddQsTile: pre-Android 13 — API unavailable, reporting false")
+            onResult(false)
+            return
+        }
+        try {
+            val sbm = getSystemService(StatusBarManager::class.java)
+            val tileComponent = ComponentName(this, com.codezmr.nullflow.tile.FocusTileService::class.java)
+            val label = "GhostShield"
+            val icon = Icon.createWithResource(this, R.drawable.ic_hero_toggle)
+            // Main-thread executor (the callback must run on the main thread).
+            // Dependency-free: a Handler on the main looper implements Executor.
+            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            val mainExecutor = java.util.concurrent.Executor { handler.post(it) }
+            sbm.requestAddTileService(
+                tileComponent,
+                label,
+                icon,
+                mainExecutor,
+                java.util.function.Consumer { resultCode: Int? ->
+                    // 0 = user confirmed the add; non-zero = dismissed/error.
+                    val added = resultCode == 0
+                    AppLog.d("requestAddQsTile: callback resultCode=$resultCode added=$added")
+                    onResult(added)
+                }
+            )
+            AppLog.d("requestAddQsTile: requestAddTileService invoked for $tileComponent")
+        } catch (e: Exception) {
+            AppLog.e("requestAddQsTile FAILED", e)
+            onResult(false)
+        }
     }
 
     /**
