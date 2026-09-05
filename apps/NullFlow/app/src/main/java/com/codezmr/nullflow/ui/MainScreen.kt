@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,10 +23,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,15 +48,25 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
+import com.codezmr.nullflow.data.AppInterceptStats
+import com.codezmr.nullflow.data.DailyFocusStats
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusProfile
+import com.codezmr.nullflow.data.PeakHourStats
 import com.codezmr.nullflow.ui.tile.rememberAppIconPainter
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -61,7 +74,7 @@ import kotlinx.coroutines.launch
 /**
  * The whole app in one screen (Big Tech approach):
  *  - Hero toggle (massive, animated, haptic)
- *  - Quantified-relief stats
+ *  - Focus Telemetry Console (live interception data from the VPN blackhole)
  *  - Profile name + "edit apps" entry point (app picker sheet)
  *
  * The toggle is INSTANT: VPN consent was already handled during onboarding,
@@ -82,11 +95,17 @@ fun MainScreen(
     val totalMs by dao.observeTotalFocusedMs().collectAsState(initial = 0L)
     val completedCount by dao.observeCompletedCount().collectAsState(initial = 0)
 
-    // ---- Command Center: radar + dossier data ----
-    // Top 6 most-intercepted apps (drives the Distraction Radar).
-    val topIntercepted by dao.observeTopIntercepted(6).collectAsState(initial = emptyList())
-    // Total deflected pings across all apps (drives the shareable dossier).
-    val totalDeflected by dao.observeTotalDeflected().collectAsState(initial = 0L)
+    // ---- Focus Telemetry Console: live interception data ----
+    // Top 5 most-intercepted apps (drives the donut + the threat ledger).
+    val topIntercepted by dao.getInterceptionsByApp(5).collectAsState(initial = emptyList())
+    // Total intercepted pings across all time ("Threats Neutralized").
+    val totalIntercepts by dao.getTotalIntercepts().collectAsState(initial = 0)
+    // The hour of day with the most intercepts ("Peak Focus Time").
+    val peakHour by dao.getPeakInterceptHour().collectAsState(initial = null)
+    // Per-day telemetry for the last 7 days (heatmap).
+    val dailyTelemetry by dao.getDailyTelemetry(localMidnight(System.currentTimeMillis()))
+        .collectAsState(initial = emptyList())
+
     // Dossier generation state (for the share button's loading feedback).
     var dossierBusy by remember { mutableStateOf(false) }
 
@@ -169,7 +188,7 @@ fun MainScreen(
                 val path = DossierGenerator.generateAndSave(
                     context = context,
                     totalFocusMs = totalMs,
-                    totalDeflected = totalDeflected,
+                    totalDeflected = totalIntercepts.toLong(),
                     completedSessions = completedCount
                 )
                 if (path != null) {
@@ -322,12 +341,13 @@ fun MainScreen(
                     completedCount = completedCount
                 )
             } else {
-                // ---- Inactive: the Premium Analytics Command Center ----
-                CommandCenter(
+                // ---- Inactive: the Focus Telemetry Console ----
+                TelemetryConsole(
                     topIntercepted = topIntercepted,
-                    totalDeflected = totalDeflected,
+                    totalIntercepts = totalIntercepts,
                     totalMs = totalMs,
-                    completedCount = completedCount,
+                    peakHour = peakHour,
+                    dailyTelemetry = dailyTelemetry,
                     dossierBusy = dossierBusy,
                     onShareDossier = { onShareDossier() }
                 )
@@ -419,15 +439,39 @@ private fun HudHeader(isShieldActive: Boolean) {
 }
 
 // ---------------------------------------------------------------------------
-// Command Center (inactive state) — radar + shareable dossier
+// Focus Telemetry Console (inactive state)
 // ---------------------------------------------------------------------------
+//
+// A cybersecurity-style observability hub, built STRICTLY from live Room data:
+//  - Telemetry header: 3 glassmorphic metric cards (Total Uptime, Threats
+//    Neutralized, Peak Focus Time).
+//  - Interception donut: thick-ringed Canvas chart of the top 3 most-blocked
+//    apps (Cyan / Purple / Electric Blue).
+//  - Threat ledger: the top 5 blocked apps with icon, exact intercept count,
+//    and a progress bar proportional to the top app's count.
+//  - 7-day activity heatmap: one rounded box per day, color-coded by the
+//    daily Focus Score (dim #1A1D24 → glowing #00E5FF).
+//
+// If the intercept log is empty, a sleek "[ AWAITING NETWORK TELEMETRY ]"
+// wireframe is rendered instead of a 0% pie chart.
+
+// Neon palette for the donut segments (top 3 apps).
+private val DonutCyan = Color(0xFF00E5FF)
+private val DonutPurple = Color(0xFFB44CFF)
+private val DonutBlue = Color(0xFF4F8CFF)
+private val DonutPalette = listOf(DonutCyan, DonutPurple, DonutBlue)
+
+// Heatmap palette: dim (no focus) → glowing (deep work).
+private val HeatDim = Color(0xFF1A1D24)
+private val HeatGlow = Color(0xFF00E5FF)
 
 @Composable
-private fun CommandCenter(
-    topIntercepted: List<com.codezmr.nullflow.data.BlockedApp>,
-    totalDeflected: Long,
+private fun TelemetryConsole(
+    topIntercepted: List<AppInterceptStats>,
+    totalIntercepts: Int,
     totalMs: Long,
-    completedCount: Int,
+    peakHour: PeakHourStats?,
+    dailyTelemetry: List<DailyFocusStats>,
     dossierBusy: Boolean,
     onShareDossier: () -> Unit
 ) {
@@ -436,67 +480,93 @@ private fun CommandCenter(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "DISTRACTION RADAR",
+            text = "FOCUS TELEMETRY",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.5.sp,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Drag across a node to inspect",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
-        )
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
-        // The hexagonal radar (square aspect, ~220dp — compact to keep the
-        // bottom dashboard anchored without pushing the center content off).
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
+        // ---- 1. Telemetry header: glassmorphic metric cards ----
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (topIntercepted.isEmpty()) {
-                // Empty state: no interceptions yet.
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "No data yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Activate the shield to start tracking",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
-                    )
-                }
-            } else {
-                FocusRadarGraph(
-                    apps = topIntercepted,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+            MetricCard(
+                value = formatDuration(totalMs),
+                label = "TOTAL UPTIME",
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                value = "$totalIntercepts",
+                label = "THREATS NEUTRALIZED",
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                value = formatPeakHour(peakHour),
+                label = "PEAK FOCUS TIME",
+                modifier = Modifier.weight(1f)
+            )
         }
 
         Spacer(Modifier.height(14.dp))
 
-        // Aggregate stats (compact, under the radar).
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            StatCell(value = formatDuration(totalMs), label = "all-time focus")
-            StatCell(value = "$totalDeflected", label = "distractions intercepted")
-            StatCell(value = "$completedCount", label = "sessions")
+        if (totalIntercepts == 0) {
+            // ---- Empty state: no intercepts logged yet ----
+            AwaitingTelemetryWireframe()
+        } else {
+            // ---- 2. Interception donut (top 3 apps) ----
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+            ) {
+                InterceptionDonut(
+                    stats = topIntercepted.take(3),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ---- 3. Threat ledger: top 5 blocked apps ----
+            Text(
+                text = "THREAT LEDGER",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(Modifier.height(6.dp))
+            InterceptLedger(
+                stats = topIntercepted,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // ---- 4. 7-day activity heatmap ----
+            Text(
+                text = "7-DAY ACTIVITY",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(Modifier.height(6.dp))
+            ActivityHeatmap(
+                daily = dailyTelemetry,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
 
         // ---- Share the Zero-Leak Dossier ----
         ShareDossierButton(
@@ -505,6 +575,350 @@ private fun CommandCenter(
         )
     }
 }
+
+// ---------------------------------------------------------------------------
+// Telemetry header metric card — dark glassmorphic (#12151C / #222733 border)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun MetricCard(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF12151C))
+            .border(1.dp, Color(0xFF222733), RoundedCornerShape(14.dp))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = Color(0xFF00E5FF),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = label,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.5.sp,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Interception donut — thick-ringed Canvas chart of the top 3 blocked apps
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun InterceptionDonut(
+    stats: List<AppInterceptStats>,
+    modifier: Modifier = Modifier
+) {
+    val total = stats.sumOf { it.interceptCount.toLong() }.coerceAtLeast(1L)
+    // Animated reveal: the ring sweeps in on first draw.
+    val reveal by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+        label = "donutReveal"
+    )
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val radius = minOf(size.width, size.height) / 2f * 0.86f
+            val strokeWidth = radius * 0.34f // thick ring
+            val gapDeg = 3f // small gap between segments
+
+            var startAngle = -90f // 12 o'clock
+            stats.forEachIndexed { i, stat ->
+                val sweep = (stat.interceptCount.toFloat() / total.toFloat()) * 360f * reveal
+                if (sweep > 0.1f) {
+                    drawArc(
+                        color = DonutPalette[i % DonutPalette.size],
+                        startAngle = startAngle + gapDeg / 2f,
+                        sweepAngle = (sweep - gapDeg).coerceAtLeast(0.1f),
+                        useCenter = false,
+                        topLeft = Offset(cx - radius, cy - radius),
+                        size = androidx.compose.ui.geometry.Size(radius * 2f, radius * 2f),
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                    )
+                }
+                startAngle += sweep
+            }
+        }
+
+        // Center readout: total threats neutralized.
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "${stats.sumOf { it.interceptCount }}",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFFE6EAF0)
+            )
+            Text(
+                text = "DROPPED",
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Threat ledger — LazyColumn of the top blocked apps
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun InterceptLedger(
+    stats: List<AppInterceptStats>,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val maxCount = stats.firstOrNull()?.interceptCount?.coerceAtLeast(1) ?: 1
+
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        items(stats, key = { it.packageName }) { stat ->
+            val painter = rememberAppIconPainter(context, stat.packageName)
+            val appName = remember(stat.packageName) {
+                loadAppName(context, stat.packageName)
+            }
+            val progress = stat.interceptCount.toFloat() / maxCount.toFloat()
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF12151C))
+                    .border(1.dp, Color(0xFF222733), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                // App icon (28dp rounded square).
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1E2430))
+                ) {
+                    Image(
+                        painter = painter,
+                        contentDescription = appName,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = appName,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFE6EAF0),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "${stat.interceptCount}×",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF00E5FF)
+                        )
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    // Progress bar: filled proportional to the top app's count.
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = DonutCyan,
+                        trackColor = Color(0xFF1E222B)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Resolve a package name to its human-readable app label (cached). */
+private val appNameCache = HashMap<String, String>()
+
+private fun loadAppName(context: android.content.Context, packageName: String): String {
+    appNameCache[packageName]?.let { return it }
+    val name = try {
+        val info = context.packageManager.getApplicationInfo(packageName, 0)
+        context.packageManager.getApplicationLabel(info).toString()
+    } catch (_: Exception) {
+        // Uninstalled app — fall back to the last segment of the package name.
+        packageName.substringAfterLast('.')
+    }
+    appNameCache[packageName] = name
+    return name
+}
+
+// ---------------------------------------------------------------------------
+// 7-day activity heatmap — one rounded box per day, color-coded by Focus Score
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ActivityHeatmap(
+    daily: List<DailyFocusStats>,
+    modifier: Modifier = Modifier
+) {
+    // The DAO always returns exactly 7 rows (oldest→newest, anchored at
+    // localMidnight(now-6d)); days with no activity come back as zeros.
+    val days = remember(daily) { daily }
+    // Normalize the Focus Score against the best day (deep work = 1.0).
+    val maxScore = remember(days) {
+        days.maxOf { focusScore(it) }.coerceAtLeast(1f)
+    }
+    val dayLabelFmt = remember { SimpleDateFormat("EEE", Locale.US) }
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        days.forEach { day ->
+            val score = (focusScore(day) / maxScore).coerceIn(0f, 1f)
+            val isToday = day.dayStart == localMidnight(System.currentTimeMillis())
+            val cellColor = lerpColor(HeatDim, HeatGlow, score)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(cellColor.copy(alpha = 0.12f + 0.88f * score))
+                    .border(
+                        width = 1.dp,
+                        color = if (isToday) HeatGlow.copy(alpha = 0.8f) else Color(0xFF222733),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = dayLabelFmt.format(Date(day.dayStart)),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (score > 0.5f) Color(0xFF0A0C10)
+                    else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = if (day.focusMs > 0) formatDuration(day.focusMs) else "—",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (score > 0.5f) Color(0xFF0A0C10)
+                    else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Daily Focus Score (0..1 scale before normalization): focused minutes are the
+ * primary signal; intercepted pings add a small secondary weight (a day where
+ * the shield worked hard is still a "focus" day).
+ */
+private fun focusScore(day: DailyFocusStats): Float {
+    val focusMinutes = day.focusMs / 60_000f
+    val interceptWeight = day.interceptCount * 0.5f
+    return (focusMinutes + interceptWeight).coerceAtLeast(0f)
+}
+
+/** Linear interpolation between two colors (t in 0..1). */
+private fun lerpColor(from: Color, to: Color, t: Float): Color {
+    val tt = t.coerceIn(0f, 1f)
+    return Color(
+        red = from.red + (to.red - from.red) * tt,
+        green = from.green + (to.green - from.green) * tt,
+        blue = from.blue + (to.blue - from.blue) * tt,
+        alpha = from.alpha + (to.alpha - from.alpha) * tt
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Empty state — "[ AWAITING NETWORK TELEMETRY ]" wireframe
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun AwaitingTelemetryWireframe() {
+    // Subtle pulsing glow so the wireframe feels alive, not dead.
+    val pulse by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+        label = "awaitPulse"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF12151C))
+            .border(
+                width = 1.dp,
+                color = Color(0xFF00E5FF).copy(alpha = 0.15f + 0.2f * pulse),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Wireframe "signal" glyph: three rising bars (monospace aesthetic).
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf(8.dp, 14.dp, 20.dp).forEach { h ->
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(h)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color(0xFF00E5FF).copy(alpha = 0.25f + 0.35f * pulse))
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = "[ AWAITING NETWORK TELEMETRY ]",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.sp,
+                color = Color(0xFF00E5FF).copy(alpha = 0.5f + 0.4f * pulse)
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Activate the shield to start logging intercepted pings",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Share dossier button
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun ShareDossierButton(busy: Boolean, onClick: () -> Unit) {
@@ -630,7 +1044,7 @@ private fun HeroToggle(isActive: Boolean, onClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// Stats
+// Stats (active session)
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -672,6 +1086,26 @@ private fun formatDuration(ms: Long): String {
     val h = totalSec / 3600
     val m = (totalSec % 3600) / 60
     return if (h > 0) "${h}h ${m}m" else "${m}m"
+}
+
+/** Format a peak hour-of-day (0-23) as e.g. "09:00 AM". Null → "—". */
+private fun formatPeakHour(peak: PeakHourStats?): String {
+    if (peak == null) return "—"
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, peak.hourOfDay)
+    val fmt = SimpleDateFormat("hh:00 a", Locale.US)
+    return fmt.format(cal.time)
+}
+
+/** Local-midnight epoch-ms for the given instant (day boundary for the heatmap). */
+private fun localMidnight(epochMs: Long): Long {
+    val cal = Calendar.getInstance()
+    cal.timeInMillis = epochMs
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    return cal.timeInMillis
 }
 
 // ---------------------------------------------------------------------------

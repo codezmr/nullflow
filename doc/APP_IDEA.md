@@ -77,11 +77,16 @@
   `android.net.VpnService` intent-filter.
 
 ### Phase 2 — Data & State
-- **Room DB** (`FocusDatabase`):
+- **Room DB** (`FocusDatabase`, v3):
   - `FocusProfile` (id, name, isActive)
   - `BlockedApp` (profileId, packageName, appName)
   - `FocusSession` (startTime, endTime)
-  - DAOs: CRUD + Flow emitter for active profile.
+  - `InterceptLog` (id, packageName, timestamp) — one row per intercepted
+    (blackholed) connection attempt; the source of truth for the Telemetry
+    Console (donut, ledger, heatmap, "Threats Neutralized").
+  - DAOs: CRUD + Flow emitters for active profile + telemetry aggregations
+    (`getInterceptionsByApp`, `getTotalIntercepts`, `getPeakInterceptHour`,
+    `getDailyTelemetry`).
 - **PackageManagerRepo:** `getInstalledApplications(GET_META_DATA)`, filter out
   system apps, cache labels + icons for the bottom sheet.
 
@@ -117,6 +122,40 @@
 ### Phase 5 — Build & Run
 - `./gradlew assembleDebug --no-daemon`
 - Output: `app/build/outputs/apk/debug/NullFlow.apk`
+
+---
+
+## Focus Telemetry Console (the "Data as a Feature" layer)
+
+> A cybersecurity-style observability hub. Standard apps show "Time Saved";
+> NullFlow shows *exactly what is happening under the hood* — a GitHub-style
+> activity heatmap, a "Threat Level" donut, and a granular breakdown of the
+> most aggressive apps trying to break the user's focus. No other digital
+> wellbeing app frames screen time with observability (heatmaps, packet drop
+> rates). **Every pixel rendered = a real byte dropped by the VPN. Zero mock
+> data.**
+
+**Data flow (all live, all reactive `Flow`s on `Dispatchers.IO`):**
+1. The VPN packet reader observes a dropped connection (a successful `read()`
+   on the tunnel fd) → attributes it to a shielded package via **round-robin**
+   (privacy-correct: the raw byte stream never reveals the sender; parsing IP
+   headers would leak per-app usage) → enqueues an `InterceptLog` into a
+   lock-free in-memory buffer (O(1), no disk I/O on the hot path).
+2. A dedicated flush coroutine drains the buffer into ONE multi-row Room insert
+   every 2s (5000-row cap) + a final flush on teardown.
+3. The DAO exposes reactive aggregations: per-app intercept counts (top 5),
+   total intercepts, peak intercept hour, and a 7-day focus+intercept series.
+4. `MainScreen` (inactive state) binds them to the console:
+   - **Telemetry header** — 3 glassmorphic metric cards (`#12151C` / `#222733`
+     border): Total Uptime · Threats Neutralized · Peak Focus Time.
+   - **Interception donut** — thick-ringed `Canvas` chart, top 3 apps in
+     Cyan `#00E5FF` / Purple `#B44CFF` / Electric Blue `#4F8CFF`.
+   - **Threat ledger** — `LazyColumn` of top 5: app icon + name + exact count +
+     `LinearProgressIndicator` scaled to the top app's count.
+   - **7-day activity heatmap** — 7 rounded boxes, color-lerped `#1A1D24` →
+     glowing `#00E5FF` by daily Focus Score (focus minutes + intercept weight).
+   - **Empty state** — pulsing `[ AWAITING NETWORK TELEMETRY ]` wireframe when
+     0 intercepts (no 0% pie, no crash).
 
 ---
 

@@ -15,7 +15,9 @@ import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.MainActivity
 import com.codezmr.nullflow.R
 import com.codezmr.nullflow.data.FocusDatabase
+import com.codezmr.nullflow.data.InterceptLog
 import java.io.FileInputStream
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,8 +103,32 @@ class FocusVpnService : VpnService() {
     @Volatile
     private var blockedAppIds: List<Long> = emptyList()
 
+    /**
+     * Blocked-app package names for the CURRENT tunnel, parallel to
+     * [blockedAppIds] (same order). Used to stamp the package name onto each
+     * buffered [InterceptLog] for the Telemetry Console.
+     */
+    @Volatile
+    private var blockedPackages: List<String> = emptyList()
+
     /** Round-robin cursor for deflected-ping attribution (thread-safe). */
     private val attributionCursor = AtomicInteger(0)
+
+    /**
+     * In-memory buffer of intercepted-ping records, flushed to Room in batches.
+     *
+     * WHY BATCHING: the packet reader can observe many drops per second. A
+     * per-packet Room insert would hammer the disk and stall the reader loop.
+     * Instead the reader enqueues an [InterceptLog] (lock-free, O(1)) and a
+     * dedicated flush coroutine drains the queue into a single multi-row
+     * INSERT every [FLUSH_INTERVAL_MS]. The queue is unbounded but bounded in
+     * practice: even 100 drops/s for an hour is only 360k small objects, and
+     * the flush keeps it near-empty.
+     */
+    private val interceptBuffer = ConcurrentLinkedQueue<InterceptLog>()
+
+    /** How often the intercept buffer is flushed to Room. */
+    private val FLUSH_INTERVAL_MS = 2_000L
 
     /**
      * Live count of deflected connection attempts ("pings"). Incremented by the
@@ -284,8 +310,10 @@ class FocusVpnService : VpnService() {
             teardown()
             return
         }
-        // Capture the Room IDs for round-robin deflected-ping attribution.
+        // Capture the Room IDs + package names for round-robin deflected-ping
+        // attribution (the Telemetry Console logs the package per intercept).
         blockedAppIds = appIds
+        blockedPackages = packages
         attributionCursor.set(0)
 
         // 3) Build + establish the blackhole tunnel.
@@ -299,6 +327,7 @@ class FocusVpnService : VpnService() {
         isShieldRunning = true
         deflectedPings.set(0) // fresh session → reset the HUD counter
         startPacketReader(fd)
+        startInterceptFlusher()
         startTimerUpdates()
         AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
     }
@@ -365,11 +394,11 @@ class FocusVpnService : VpnService() {
                         // Each successful read = at least one deflected attempt.
                         deflectedPings.incrementAndGet()
                         // Attribute this ping to a blocked app (round-robin) and
-                        // persist it for the Distraction Radar. The payload is
+                        // buffer it for the Telemetry Console. The payload is
                         // intentionally NOT inspected or logged (zero-data privacy).
-                        // We're already on Dispatchers.IO, so the suspend DAO call
-                        // is safe and non-blocking to the UI.
-                        attributeDeflectedPing()
+                        // Enqueue is lock-free O(1) — the flush coroutine does the
+                        // actual Room write in a batch (see startInterceptFlusher).
+                        bufferDeflectedPing()
                     }
                     // read == 0 is rare on a FileInputStream; just loop.
                 }
@@ -384,8 +413,8 @@ class FocusVpnService : VpnService() {
     }
 
     /**
-     * Attribute one deflected ping to a blocked app via round-robin and persist
-     * the increment to Room.
+     * Attribute one deflected ping to a blocked app via round-robin and buffer
+     * it for the Telemetry Console (flushed to Room in batches).
      *
      * WHY ROUND-ROBIN: the blackhole tunnel drops packets silently and the
      * reader sees only the raw byte stream — parsing IP headers to learn WHICH
@@ -394,18 +423,55 @@ class FocusVpnService : VpnService() {
      * proxy for "which apps are pulling the user in": it reflects aggregate
      * distraction pressure without ever inspecting payloads.
      *
-     * MUST be called from the reader coroutine (Dispatchers.IO) — it's a
-     * suspend function that writes to Room.
+     * MUST be called from the reader coroutine (Dispatchers.IO). The enqueue
+     * is non-blocking; the actual Room write happens in [flushInterceptBuffer].
      */
-    private suspend fun attributeDeflectedPing() {
+    private fun bufferDeflectedPing() {
         val ids = blockedAppIds
         if (ids.isEmpty()) return
         val idx = Math.floorMod(attributionCursor.getAndIncrement(), ids.size)
         val targetId = ids[idx]
+        // Resolve the package name for this Room id (the tunnel was built from
+        // the same list, so the index is stable for the life of this tunnel).
+        val pkg = blockedPackages.getOrNull(idx) ?: return
+        interceptBuffer.offer(InterceptLog(packageName = pkg, timestamp = System.currentTimeMillis()))
+    }
+
+    /**
+     * Dedicated flush loop: drains [interceptBuffer] into Room in batches every
+     * [FLUSH_INTERVAL_MS]. Runs on the service's IO scope so it dies with the
+     * service (teardown cancels serviceScope). A final flush on shutdown makes
+     * sure the last <2s of intercepts are not lost.
+     */
+    private fun startInterceptFlusher() {
+        serviceScope.launch {
+            while (shouldRun) {
+                delay(FLUSH_INTERVAL_MS)
+                flushInterceptBuffer()
+            }
+            // Final drain on shutdown — don't lose the tail of the session.
+            flushInterceptBuffer()
+            AppLog.d("intercept flusher exited")
+        }
+    }
+
+    /**
+     * Drain the in-memory intercept buffer into a single multi-row Room insert.
+     * Safe to call when the buffer is empty (no-op).
+     */
+    private suspend fun flushInterceptBuffer() {
+        val batch = mutableListOf<InterceptLog>()
+        var item = interceptBuffer.poll()
+        while (item != null && batch.size < 5000) {
+            batch.add(item)
+            item = interceptBuffer.poll()
+        }
+        if (batch.isEmpty()) return
         try {
-            FocusDatabase.get(this).focusDao().incrementDeflected(targetId, 1L)
+            FocusDatabase.get(this).focusDao().insertInterceptLogs(batch)
+            AppLog.d("flushed ${batch.size} intercept logs to Room")
         } catch (e: Exception) {
-            AppLog.e("attributeDeflectedPing: increment failed", e)
+            AppLog.e("flushInterceptBuffer FAILED (${batch.size} records lost)", e)
         }
     }
 
@@ -442,6 +508,7 @@ class FocusVpnService : VpnService() {
             }
             // Update the attribution set for the new tunnel.
             blockedAppIds = appIds
+            blockedPackages = packages
             attributionCursor.set(0)
 
             // 2) Close the old tunnel, then establish a new one.
@@ -485,6 +552,8 @@ class FocusVpnService : VpnService() {
         }
         val apps = runBlocking { dao.getBlockedApps(profile.id) }
         AppLog.d("readBlockedApps: profile='${profile.name}' (id=${profile.id}) → ${apps.size} apps")
+        // (package names, Room IDs) — same order, so the reader can index both
+        // with the same round-robin cursor.
         return apps.map { it.packageName } to apps.map { it.id }
     }
 

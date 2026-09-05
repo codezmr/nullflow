@@ -15,7 +15,89 @@
 
 ---
 
-## ✅ Current Status: BUILT — UI Polish, Layout Anchoring & Copy Enforcement
+## ✅ Current Status: BUILT — Focus Telemetry Console (live interception data)
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):**
+`NullFlow.apk` (32 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+**UNCOMMITTED** — working tree has the telemetry changes staged for review.
+
+### What changed (this round)
+The basic stats view is replaced by a **Focus Telemetry Console** — a
+cybersecurity-style observability hub built STRICTLY from live Room data
+(every pixel = a real byte dropped by the VPN; zero mock data).
+
+1. **Data layer** (Room **v2 → v3**, `fallbackToDestructiveMigration`):
+   - `data/InterceptLog.kt` (NEW) — entity `intercept_logs(id AutoGenerate,
+     packageName, timestamp)`, indexed on `timestamp` + `packageName`.
+   - `data/AppInterceptStats.kt` (NEW) — `(packageName, interceptCount)`.
+   - `data/DailyFocusStats.kt` (NEW) — `(dayStart, focusMs, interceptCount)`.
+   - `data/PeakHourStats.kt` (NEW) — `(hourOfDay, cnt)`.
+   - `data/BlockedApp.kt` — **removed `deflectedCount`** (replaced by the
+     intercept log; the old per-app counter column is dead).
+   - `data/FocusDao.kt` — replaced the radar queries with:
+     - `getInterceptionsByApp(limit=5)` → `SELECT packageName, COUNT(id) ...
+       GROUP BY packageName ORDER BY interceptCount DESC LIMIT :limit`
+     - `getTotalIntercepts()` → `SELECT COUNT(id) FROM intercept_logs`
+     - `getPeakInterceptHour()` → `strftime('%H', timestamp/1000, 'unixepoch',
+       'localtime')` grouped, top 1 (the "Peak Focus Time" metric)
+     - `getDailyTelemetry(dayStart)` → 7-row day-series (UNION ALL generator)
+       joining focus-session ms + intercept counts per day (heatmap)
+     - `insertInterceptLogs(List)` — batch insert
+   - `data/FocusDatabase.kt` — v3, registered `InterceptLog`.
+2. **Service layer** (`vpn/FocusVpnService.kt`) — **batched live packet logging**:
+   - Packet reader now calls `bufferDeflectedPing()`: round-robin attribution
+     (same privacy-correct scheme, now keyed by **package name**) → lock-free
+     `ConcurrentLinkedQueue` enqueue (O(1) on the hot path).
+   - New `startInterceptFlusher()`: drains the queue into ONE multi-row Room
+     insert every **2s** on `Dispatchers.IO` (5000-row cap) + a final flush on
+     teardown so the session tail isn't lost. No per-packet disk I/O.
+   - `blockedPackages` (parallel to `blockedAppIds`) stamps the package name
+     onto each buffered `InterceptLog`.
+3. **UI layer** (`ui/MainScreen.kt`) — **Telemetry Console** (inactive state):
+   - **Deleted `ui/FocusRadarGraph.kt`** (the hexagonal radar is gone).
+   - **Telemetry header:** 3 glassmorphic metric cards (`#12151C` surface,
+     `#222733` border) — **Total Uptime** (all-time focus), **Threats
+     Neutralized** (total intercepts), **Peak Focus Time** (e.g. "09:00 AM").
+   - **Interception donut:** thick-ringed `Canvas` chart, top 3 apps in
+     Cyan `#00E5FF` / Purple `#B44CFF` / Electric Blue `#4F8CFF`, animated
+     sweep-in, center "DROPPED" total readout.
+   - **Threat ledger:** `LazyColumn` of top 5 — app icon
+     (`rememberAppIconPainter`), resolved app label, exact `N×` count,
+     `LinearProgressIndicator` scaled to the top app's count.
+   - **7-day activity heatmap:** 7 rounded boxes, color-lerped `#1A1D24` →
+     glowing `#00E5FF` by daily Focus Score (focus minutes + intercept weight);
+     today outlined in cyan.
+   - **Empty state:** pulsing `[ AWAITING NETWORK TELEMETRY ]` wireframe when
+     0 intercepts (no 0% pie, no crash).
+   - Dossier share now fed by `getTotalIntercepts()` (live).
+
+### Assumptions (documented — no interactive channel back to Zamir)
+1. **Package attribution:** the tunnel fd yields only a raw byte stream — the
+   OS never says which app sent a packet (parsing IP headers would leak
+   per-app usage). Kept the existing **round-robin** attribution across the
+   shielded packages, now stamped per-package into `InterceptLog`.
+2. **Peak Focus Time** = hour of day with the most intercepted pings (the only
+   per-event timestamp we have; sessions are too coarse for "09:00 AM").
+3. **Heatmap day boundaries** = local midnight; the DAO always returns exactly
+   7 rows (zero-filled), so no client-side gap-filling.
+4. DB v3 with destructive migration (consistent with the project's existing
+   migration strategy — existing users lose old data on upgrade).
+
+### ⚠️ Still to verify on device (after install)
+- Inactive screen: 3 metric cards + donut + ledger + heatmap render (no
+  overflow, dashboard stays pinned to the bottom).
+- Fresh install (0 intercepts): `[ AWAITING NETWORK TELEMETRY ]` wireframe
+  shows instead of a 0% pie.
+- After a shield session: donut shows top-3 apps in cyan/purple/blue; ledger
+  shows icons + exact counts + progress bars; heatmap lights up for today.
+- "Threats Neutralized" count matches the notification's "X Distractions
+  Intercepted" (both from the same live data).
+- Peak Focus Time shows a real hour (e.g. "09:00 AM") after intercepts exist.
+- (Carried) HUD + packet counter + QS pinning + dossier share still working.
+
+---
+
+## ✅ Previous: BUILT — UI Polish, Layout Anchoring & Copy Enforcement
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero warnings):**
 `NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.

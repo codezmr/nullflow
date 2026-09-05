@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [FocusProfile::class, BlockedApp::class, FocusSession::class],
-    version = 2,
+    entities = [FocusProfile::class, BlockedApp::class, FocusSession::class, InterceptLog::class],
+    version = 3,
     exportSchema = false
 )
 abstract class FocusDatabase : RoomDatabase() {

@@ -278,6 +278,83 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
 
 ---
 
+## 7. Focus Telemetry Console (latest round)
+
+> Replaces the basic stats view with a cybersecurity-style observability hub.
+> **Strictly live data** — every pixel = a real byte dropped by the VPN. Zero
+> mock data, zero hardcoded placeholders.
+
+### 7.1 Data Layer — `InterceptLog` entity + telemetry DAOs
+**Files:** `data/InterceptLog.kt` (NEW), `data/AppInterceptStats.kt` (NEW),
+`data/DailyFocusStats.kt` (NEW), `data/PeakHourStats.kt` (NEW),
+`data/FocusDao.kt`, `data/FocusDatabase.kt`, `data/BlockedApp.kt`
+- **`InterceptLog`** entity: `intercept_logs(id AutoGenerate, packageName,
+  timestamp)`, indexed on `timestamp` + `packageName`. One row per intercepted
+  (blackholed) connection attempt.
+- **Room v2 → v3** (`fallbackToDestructiveMigration`).
+- **`BlockedApp.deflectedCount` REMOVED** — the per-app counter column is
+  replaced by the intercept log (the old radar's data source is gone).
+- **New reactive DAO queries** (all `Flow`, run off the main thread):
+  - `getInterceptionsByApp(limit=5)` →
+    `SELECT packageName, COUNT(id) AS interceptCount FROM intercept_logs
+    GROUP BY packageName ORDER BY interceptCount DESC, packageName ASC
+    LIMIT :limit`
+  - `getTotalIntercepts()` → `SELECT COUNT(id) FROM intercept_logs`
+  - `getPeakInterceptHour()` →
+    `SELECT CAST(strftime('%H', timestamp/1000, 'unixepoch', 'localtime') AS
+    INTEGER) AS hourOfDay, COUNT(id) AS cnt FROM intercept_logs GROUP BY
+    hourOfDay ORDER BY cnt DESC, hourOfDay ASC LIMIT 1`
+  - `getDailyTelemetry(dayStart)` → a 7-row day-series (UNION ALL generator
+    `SELECT 0..6`) joining focus-session ms + intercept counts per day
+    (local-midnight boundaries). Always returns exactly 7 rows (zero-filled).
+  - `insertInterceptLogs(List<InterceptLog>)` — batch insert.
+
+### 7.2 Service Layer — batched live packet logging
+**File:** `vpn/FocusVpnService.kt`
+- The packet reader now calls `bufferDeflectedPing()`: round-robin attribution
+  (same privacy-correct scheme as before, now keyed by **package name**) →
+  enqueues an `InterceptLog` into a lock-free `ConcurrentLinkedQueue` (O(1) on
+  the hot path — no per-packet disk I/O).
+- **`startInterceptFlusher()`** — a dedicated IO coroutine drains the queue into
+  ONE multi-row Room insert every **2s** (5000-row cap) + a final flush on
+  teardown so the session tail isn't lost.
+- `blockedPackages` (parallel to `blockedAppIds`) stamps the package name onto
+  each buffered `InterceptLog`.
+
+### 7.3 UI Layer — the Telemetry Console
+**Files:** `ui/MainScreen.kt` (rewritten), `ui/FocusRadarGraph.kt` (DELETED)
+- **Deleted the hexagonal radar** (`FocusRadarGraph.kt`).
+- **Telemetry header:** 3 glassmorphic metric cards (`#12151C` surface,
+  `#222733` border, monospace values): **Total Uptime** (all-time focus) ·
+  **Threats Neutralized** (total intercepts) · **Peak Focus Time** (e.g.
+  "09:00 AM", from `getPeakInterceptHour`).
+- **Interception donut** (`InterceptionDonut`): thick-ringed `Canvas` chart of
+  the top 3 apps — Cyan `#00E5FF` / Purple `#B44CFF` / Electric Blue `#4F8CFF` —
+  animated sweep-in, 3° gaps between segments, center "DROPPED" total readout.
+- **Threat ledger** (`InterceptLedger`): `LazyColumn` of the top 5 — app icon
+  (`rememberAppIconPainter`), resolved app label (PackageManager, cached), exact
+  `N×` count, `LinearProgressIndicator` scaled to the top app's count.
+- **7-day activity heatmap** (`ActivityHeatmap`): 7 rounded boxes, color-lerped
+  `#1A1D24` → glowing `#00E5FF` by the daily Focus Score (focus minutes +
+  intercept weight, normalized against the best day); today outlined in cyan.
+- **Empty state** (`AwaitingTelemetryWireframe`): a pulsing
+  `[ AWAITING NETWORK TELEMETRY ]` wireframe (3 rising signal bars + monospace
+  label) when 0 intercepts — no 0% pie, no crash.
+- Dossier share now fed by `getTotalIntercepts()` (live).
+
+### 7.4 Assumptions (documented)
+1. **Package attribution:** the tunnel fd yields only a raw byte stream — the
+   OS never says which app sent a packet (parsing IP headers would leak
+   per-app usage). Kept **round-robin** attribution across the shielded
+   packages, now stamped per-package into `InterceptLog`.
+2. **Peak Focus Time** = hour of day with the most intercepted pings (the only
+   per-event timestamp; sessions are too coarse for "09:00 AM").
+3. **Heatmap day boundaries** = local midnight; the DAO always returns exactly
+   7 rows (zero-filled), so no client-side gap-filling.
+4. DB v3 with destructive migration (existing users lose old data on upgrade).
+
+---
+
 ## Verification
 - `./gradlew assembleDebug` compiles clean (zero warnings on touched files).
 - All Room interactions off the main thread (`Dispatchers.IO`).
@@ -311,3 +388,12 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
   - Empty state: "Choose apps to shield" button has dark bg + cyan border.
   - Onboarding: SwipeToArmSlider and QS button have matching 56dp/16dp geometry.
   - Share dossier: generates PNG without crashing (no windowRecomposer error).
+  - Telemetry Console (shield OFF): 3 metric cards + donut + ledger + heatmap
+    render (no overflow, dashboard stays pinned to the bottom).
+  - Fresh install (0 intercepts): `[ AWAITING NETWORK TELEMETRY ]` wireframe
+    shows instead of a 0% pie.
+  - After a shield session: donut shows top-3 apps in cyan/purple/blue; ledger
+    shows icons + exact counts + progress bars; heatmap lights up for today.
+  - "Threats Neutralized" matches the notification's "X Distractions
+    Intercepted" (same live data). Peak Focus Time shows a real hour after
+    intercepts exist.

@@ -77,29 +77,65 @@ interface FocusDao {
     @Query("DELETE FROM blocked_apps WHERE profileId = :profileId")
     suspend fun clearBlockedApps(profileId: Long)
 
+    // ---------- InterceptLog (Focus Telemetry Console) ----------
+
     /**
-     * Top [limit] most-intercepted apps (by cumulative deflected count), for
-     * the Distraction Radar. Apps with 0 interceptions are excluded (a radar
-     * of all-zeros is meaningless). Ordered by deflectedCount DESC.
+     * Insert a batch of intercepted-ping records. Called by the VPN packet
+     * reader's flush loop (buffered in memory, flushed every few seconds) so
+     * the hot packet path never does per-packet disk I/O.
+     */
+    @Insert
+    suspend fun insertInterceptLogs(logs: List<InterceptLog>)
+
+    /**
+     * Top [limit] most-intercepted apps, for the interception donut + threat
+     * ledger. One row per package, ordered by intercept count DESC.
      */
     @Query(
-        "SELECT * FROM blocked_apps " +
-            "WHERE deflectedCount > 0 " +
-            "ORDER BY deflectedCount DESC, appName COLLATE NOCASE ASC " +
+        "SELECT packageName, COUNT(id) AS interceptCount " +
+            "FROM intercept_logs " +
+            "GROUP BY packageName " +
+            "ORDER BY interceptCount DESC, packageName ASC " +
             "LIMIT :limit"
     )
-    fun observeTopIntercepted(limit: Int): Flow<List<BlockedApp>>
+    fun getInterceptionsByApp(limit: Int = 5): Flow<List<AppInterceptStats>>
+
+    /** Total intercepted pings across all time ("Threats Neutralized" metric). */
+    @Query("SELECT COUNT(id) FROM intercept_logs")
+    fun getTotalIntercepts(): Flow<Int>
 
     /**
-     * Atomically increment a blocked app's deflected count by [delta]. Called
-     * by the VPN packet reader (round-robin attribution).
+     * The hour of day (0-23, local time) with the most intercepted pings —
+     * the "Peak Focus Time" metric. Null when there are no intercepts yet.
      */
-    @Query("UPDATE blocked_apps SET deflectedCount = deflectedCount + :delta WHERE id = :id")
-    suspend fun incrementDeflected(id: Long, delta: Long)
+    @Query(
+        "SELECT CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hourOfDay, " +
+            "COUNT(id) AS cnt " +
+            "FROM intercept_logs " +
+            "GROUP BY hourOfDay " +
+            "ORDER BY cnt DESC, hourOfDay ASC " +
+            "LIMIT 1"
+    )
+    fun getPeakInterceptHour(): Flow<PeakHourStats?>
 
-    /** Total deflected pings across ALL blocked apps (for the shareable dossier). */
-    @Query("SELECT COALESCE(SUM(deflectedCount), 0) FROM blocked_apps")
-    fun observeTotalDeflected(): Flow<Long>
+    /**
+     * Per-day telemetry for the last 7 days (including today), for the 7-day
+     * activity heatmap. [dayStart] is the local-midnight epoch-ms of the day
+     * 6 days ago; the query emits exactly 7 rows (oldest→newest). Focus time
+     * comes from completed focus sessions, intercepted pings from the
+     * intercept log. Days with no activity come back as zeros.
+     */
+    @Query(
+        "SELECT d.ts AS dayStart, " +
+            "COALESCE((SELECT SUM(s.endTime - s.startTime) FROM focus_sessions s " +
+            "  WHERE s.endTime IS NOT NULL AND s.startTime >= d.ts AND s.startTime < d.ts + 86400000), 0) AS focusMs, " +
+            "COALESCE((SELECT COUNT(i.id) FROM intercept_logs i " +
+            "  WHERE i.timestamp >= d.ts AND i.timestamp < d.ts + 86400000), 0) AS interceptCount " +
+            "FROM (SELECT :dayStart + (v.n * 86400000) AS ts FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 " +
+            "  UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6) v) d " +
+            "ORDER BY d.ts ASC"
+    )
+    fun getDailyTelemetry(dayStart: Long): Flow<List<DailyFocusStats>>
 
     // ---------- FocusSession ----------
 

@@ -43,13 +43,22 @@ Instagram, etc.) while the rest of the phone works normally. Senders see a
 | SDK | compileSdk 34, minSdk 30, JDK 17 target |
 | Permissions | VIBRATE, POST_NOTIFICATIONS, FOREGROUND_SERVICE(+_DATA_SYNC), QUERY_ALL_PACKAGES |
 
-## 4. Data model (Room)
+## 4. Data model (Room, v3)
 
 - **FocusProfile** (id, name, isActive) — a named block list ("Deep Work", "Gym Mode"…).
 - **BlockedApp** (profileId, packageName, appName) — apps assigned to a profile.
 - **FocusSession** (id, profileId, startTime, endTime) — a focus session for stats.
+- **InterceptLog** (id, packageName, timestamp) — one row per intercepted
+  (blackholed) connection attempt. The source of truth for the Telemetry
+  Console. Written by the VPN service in 2s batches (in-memory buffer → one
+  multi-row insert), attributed to a shielded package via round-robin
+  (privacy-correct: the raw byte stream never reveals the sender).
 - **DAO** exposes CRUD + reactive `Flow` emitters (profiles, active profile,
-  running session, blocked apps, total focused ms, completed count).
+  running session, blocked apps, total focused ms, completed count) **plus
+  telemetry aggregations**: `getInterceptionsByApp(limit)` (per-app counts,
+  top N), `getTotalIntercepts()`, `getPeakInterceptHour()` (hour of day with
+  the most intercepts), `getDailyTelemetry(dayStart)` (7-day focus+intercept
+  series for the heatmap).
 - **PackageManagerRepo** lists installed apps (filters out system apps), caches
   labels + icons for the picker.
 
@@ -119,10 +128,26 @@ The whole app in one screen. Top → bottom:
    - **Fresh install (no profile):** shows "No focus mode yet" + a
      "Choose apps to shield" button that creates a default profile and opens
      the picker.
-5. **Quantified-relief stats row** (bottom) — three cells:
-   - *this session* / *deep focus* (live timer, updates every second while ON)
-   - *all-time focus* (total focused time)
-   - *sessions* (completed count)
+5. **Bottom dashboard** (pinned to the bottom edge, no weight):
+    - **Shield ON:** a live stats row — *this session* (live timer, 1s ticks) ·
+      *all-time focus* · *sessions*.
+    - **Shield OFF:** the **Focus Telemetry Console** — a cybersecurity-style
+      observability hub built strictly from live Room data (zero mock data):
+      - **Telemetry header** — 3 glassmorphic metric cards (`#12151C` surface,
+        `#222733` border): **Total Uptime** (all-time focus) · **Threats
+        Neutralized** (total intercepts) · **Peak Focus Time** (e.g. "09:00 AM").
+      - **Interception donut** — thick-ringed `Canvas` chart of the top 3
+        most-blocked apps (Cyan `#00E5FF` / Purple `#B44CFF` / Electric Blue
+        `#4F8CFF`), animated sweep-in, center "DROPPED" total.
+      - **Threat ledger** — `LazyColumn` of the top 5 blocked apps: app icon +
+        name + exact intercept count + a `LinearProgressIndicator` scaled to
+        the top app's count.
+      - **7-day activity heatmap** — 7 rounded boxes, color-lerped `#1A1D24` →
+        glowing `#00E5FF` by the daily Focus Score (focus minutes + intercept
+        weight); today outlined in cyan.
+      - **Empty state** — a pulsing `[ AWAITING NETWORK TELEMETRY ]` wireframe
+        when 0 intercepts have been logged (no 0% pie, no crash).
+      - Below it all: the "Share my focus dossier" gradient button.
 
 **Hero toggle behavior:**
 - **Turn ON:** instant, zero popups (VPN consent was already granted in
@@ -182,12 +207,15 @@ Pressing the system **back button or gesture** (on the main screen) shows a
 
 ## 9. Current status
 
-- **Built & working** (latest commit `fa1af96`). APK: `NullFlow.apk` (~23 MB)
-  at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+- **Built & working.** APK: `NullFlow.apk` (~32 MB) at
+  `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 - Core flow confirmed working on device: pick apps → Done → toggle ON → shield
   active (blocked apps blackholed) → toggle OFF → clean stop.
-- Recent work: welcome screen redesigned to be scrollable + premium (ambient
-  glow, feature cards, privacy pill, section labels).
+- Recent work: the **Focus Telemetry Console** — a live-data observability hub
+  (metric cards + interception donut + threat ledger + 7-day heatmap) replacing
+  the old radar. Every pixel is a real byte dropped by the VPN; the intercept
+  log is written in 2s batches by the VPN service (no per-packet disk I/O).
 - **Known watch-outs:** `QUERY_ALL_PACKAGES` is a Play Store scrutiny item (fine
   for sideloaded APK). Compose BOM 2024.02.00 has several API gotchas (documented
-  in the repo).
+  in the repo). Room is at v3 (destructive migration — existing users lose old
+  data on upgrade).
