@@ -9,3 +9,6 @@ captures/
 *.apk
 *.aab
 apps/FocusWall/app/build/
+
+# Weave tooling session artifacts (not project code/docs)
+.weave/
