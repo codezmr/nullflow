@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -188,43 +189,38 @@ fun MainScreen(
             .fillMaxSize()
             .background(bgColor)
     ) {
-        // Root Column: fillMaxSize. The top half gets weight(1f) so it takes
-        // ALL remaining space and stops exactly where the bottom dashboard
-        // begins. The dashboard is anchored below with NO weight, so it is
-        // pinned to the bottom edge and can never be pushed off-screen by the
-        // (unconstrained) middle content.
+        // Root Column: fillMaxSize. The center content gets weight(1f) so it
+        // takes ALL remaining space. The bottom dashboard is anchored with NO
+        // weight, so it is permanently pinned to the bottom edge and can never
+        // be pushed off-screen by the (unconstrained) center content.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 28.dp)
         ) {
-            // ---- 1. TOP HALF (dynamic space — takes remaining height) ----
+            // ---- 1. TOP: Tactical HUD header (fixed height) ----
+            HudHeader(
+                isShieldActive = isActive
+            )
+
+            // ---- 2. CENTER: Hero Toggle + App Icons (weight(1f) — dynamic) ----
+            // This Column absorbs all remaining vertical space. Its content is
+            // centered vertically so the Hero Toggle stays visually balanced
+            // regardless of how many app icons are shown below it.
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                // ---- Tactical HUD header (top-left, asymmetrical) ----
-                // Mimics command-line / aviation HUD aesthetics: brand + live
-                // system status anchored to the top-left edge.
-                HudHeader(
-                    isShieldActive = isActive
-                )
-
-                // Guaranteed minimum gap between the HUD header and the Hero
-                // Switch (the weight(1f) spacer below absorbs any extra space).
-                Spacer(Modifier.height(40.dp))
-
-                Spacer(Modifier.weight(1f))
-
                 // ---- THE HERO TOGGLE ----
                 HeroToggle(
                     isActive = isActive,
                     onClick = { onToggle() }
                 )
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(24.dp))
 
                 // Status line
                 Text(
@@ -240,7 +236,7 @@ fun MainScreen(
                 // Active profile name + edit
                 if (effectiveProfile != null) {
                     val profile = effectiveProfile
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(12.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable {
@@ -274,7 +270,7 @@ fun MainScreen(
                     // ---- Blocked-app icon row (transparency: see exactly what's
                     // shielded) — mirrors the QS tile panel's icon row. ----
                     if (blockedCount > 0) {
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(10.dp))
                         BlockedAppIconRow(
                             context = context,
                             apps = blockedApps,
@@ -282,40 +278,41 @@ fun MainScreen(
                         )
                     }
                 } else {
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         text = "No focus mode yet",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
                     // Fresh install: give a clear way to pick apps BEFORE toggling on.
+                    // Styled as an OutlinedButton: dark surface + 1dp cyan border.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF12151C))
+                            .border(1.dp, Color(0xFF00E5FF), RoundedCornerShape(16.dp))
                             .clickable {
                                 val profileId = createDefaultProfile(dao)
                                 onOpenPicker(profileId)
                             }
-                            .padding(horizontal = 18.dp, vertical = 12.dp)
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
                     ) {
                         Text(
                             text = "Choose apps to shield",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color(0xFF00E5FF)
                         )
                     }
                 }
-
-                Spacer(Modifier.weight(1f))
             }
 
-            // ---- 2. BOTTOM HALF (anchored dashboard — NO weight) ----
-            // Pinned to the bottom edge. The top half's weight(1f) absorbs all
-            // extra space, so this block can never be pushed off-screen.
+            // ---- 3. BOTTOM: Anchored dashboard (NO weight — pinned to bottom) ----
+            // The center's weight(1f) absorbs all extra space, so this block is
+            // permanently pinned to the bottom edge and can never be pushed
+            // off-screen by the center content.
             if (isActive) {
                 // ---- Active: live session stats ----
                 StatsRow(
@@ -336,7 +333,7 @@ fun MainScreen(
                 )
             }
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -453,11 +450,12 @@ private fun CommandCenter(
 
         Spacer(Modifier.height(12.dp))
 
-        // The hexagonal radar (square aspect, ~280dp).
+        // The hexagonal radar (square aspect, ~220dp — compact to keep the
+        // bottom dashboard anchored without pushing the center content off).
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(280.dp)
+                .height(220.dp)
         ) {
             if (topIntercepted.isEmpty()) {
                 // Empty state: no interceptions yet.
@@ -486,7 +484,7 @@ private fun CommandCenter(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(14.dp))
 
         // Aggregate stats (compact, under the radar).
         Row(
@@ -494,11 +492,11 @@ private fun CommandCenter(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             StatCell(value = formatDuration(totalMs), label = "all-time focus")
-            StatCell(value = "$totalDeflected", label = "pings deflected")
+            StatCell(value = "$totalDeflected", label = "distractions intercepted")
             StatCell(value = "$completedCount", label = "sessions")
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
 
         // ---- Share the Zero-Leak Dossier ----
         ShareDossierButton(

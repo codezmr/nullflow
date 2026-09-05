@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  "Pings Deflected" HUD shield icon — a filled shield with a check,
+  "Distractions Intercepted" HUD shield icon — a filled shield with a check,
   echoing the NullFlow brand. Used as the small icon in the custom
   RemoteViews notification. Tinted by the system (white on dark HUD).
   24dp standard icon canvas.

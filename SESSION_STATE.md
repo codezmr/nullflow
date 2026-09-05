@@ -15,9 +15,52 @@
 
 ---
 
-## ✅ Current Status: CODE-COMPLETE — Tactical HUD Header + Exit Dialog + Icon Fix
+## ✅ Current Status: BUILT — UI Polish, Layout Anchoring & Copy Enforcement
 
-**NOT YET BUILT** (awaiting Zamir's go-ahead). Three changes, all code-complete:
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero warnings):**
+`NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### What changed (this round — approved by Zamir)
+1. **Layout Anchoring** (`MainScreen.kt`): restructured the root layout so the
+   bottom dashboard (Radar + Stats) is **permanently pinned** to the bottom edge.
+   - Top: `HudHeader` (fixed height).
+   - Center: `Column(weight(1f))` containing Hero Toggle + App Icons (absorbs
+     all remaining space, content centered vertically).
+   - Bottom: `StatsRow` / `CommandCenter` (NO weight — anchored).
+   - Radar reduced from 280dp → 220dp to keep the dashboard compact.
+2. **Ghost Radar Nodes** (`FocusRadarGraph.kt`): added **text labels** (app
+   names, truncated to 12 chars) at each data vertex. The floating scrub label
+   now shows "AppName · N intercepted" instead of just "N deflected".
+3. **Global Copy Rename**: "Pings Deflected" → **"Distractions Intercepted"**
+   across all files (notification HUD, CommandCenter stats, DossierGenerator,
+   XML layout, comments).
+4. **Empty-State Button** (`MainScreen.kt`): "Choose apps to shield" now uses
+   a dark surface (#12151C) + 1dp cyan border (#00E5FF) + cyan text (was a
+   translucent primary-color pill).
+5. **Slider Geometry** (`OnboardingScreen.kt`): `SwipeToArmSlider` track height
+   64dp → **56dp**, corner radius 20dp → **16dp**, thumb 56dp → **44dp**. QS
+   button height 54dp → **56dp**. Both now match (56dp / 16dp).
+6. **DossierGenerator Crash Fix** (`DossierGenerator.kt`): replaced the
+   off-screen `ComposeView` (which crashed with "Cannot locate windowRecomposer")
+   with **pure Android Canvas drawing**. No Compose dependency — renders the
+   9:16 share card directly to a Bitmap.
+
+### ⚠️ Still to verify on device (after build)
+- MainScreen: bottom dashboard (Radar + Stats) stays visible when shield is ON
+  with multiple apps selected.
+- Radar: app name labels visible at each vertex. Scrub shows "AppName · N
+  intercepted".
+- Notification: "X Distractions Intercepted" (not "Pings Deflected").
+- Empty state: "Choose apps to shield" button has dark bg + cyan border.
+- Onboarding: SwipeToArmSlider and QS button have matching 56dp/16dp geometry.
+- Share dossier: generates PNG without crashing (no windowRecomposer error).
+
+---
+
+## ✅ Previous: BUILT — Tactical HUD Header + Exit Dialog + Icon Fix
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero warnings):**
+`NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
 ### What changed (this round — approved by Zamir)
 1. **Tactical HUD Header** (`MainScreen.kt`): replaced the centered "NullFlow"

@@ -231,14 +231,62 @@ Replaced the centered "NullFlow" + tagline with a top-left asymmetrical HUD
 
 ---
 
+## 6. UI Polish, Layout Anchoring & Copy Enforcement (latest round)
+
+### 6.1 Layout Anchoring (MainScreen)
+**File:** `ui/MainScreen.kt`
+Restructured the root layout so the bottom dashboard is **permanently pinned**:
+- Top: `HudHeader` (fixed height, no weight).
+- Center: `Column(weight(1f))` — Hero Toggle + App Icons (absorbs all
+  remaining space, content centered vertically).
+- Bottom: `StatsRow` / `CommandCenter` (NO weight — anchored to bottom edge).
+- Radar reduced from 280dp → 220dp to keep the dashboard compact.
+
+### 6.2 Ghost Radar Nodes (FocusRadarGraph)
+**File:** `ui/FocusRadarGraph.kt`
+- Added **text labels** (app names, truncated to 12 chars) at each data vertex,
+  positioned outward from the node.
+- Floating scrub label now shows "AppName · N intercepted" (was "N deflected").
+
+### 6.3 Global Copy Rename
+**Files:** `FocusVpnService.kt`, `notification_focus_hud.xml`,
+`ic_shield_hud.xml`, `DossierGenerator.kt`, `MainScreen.kt`
+- "Pings Deflected" → **"Distractions Intercepted"** (all instances).
+- Notification: "X Distractions Intercepted".
+- CommandCenter stats: "distractions intercepted".
+- Dossier: "distractions intercepted".
+
+### 6.4 Empty-State Button Styling (MainScreen)
+**File:** `ui/MainScreen.kt`
+- "Choose apps to shield" button: dark surface (#12151C) + 1dp cyan border
+  (#00E5FF) + cyan text (was a translucent primary-color pill).
+
+### 6.5 Slider Geometry Alignment (OnboardingScreen)
+**File:** `ui/OnboardingScreen.kt`
+- `SwipeToArmSlider`: track height 64dp → **56dp**, corner radius 20dp →
+  **16dp**, thumb 56dp → **44dp**.
+- QS button: height 54dp → **56dp**.
+- Both now match: 56dp height / 16dp corner radius.
+
+### 6.6 DossierGenerator Crash Fix
+**File:** `ui/DossierGenerator.kt`
+- **Root cause:** off-screen `ComposeView` crashed with "Cannot locate
+  windowRecomposer" (ComposeView requires a window attachment).
+- **Fix:** replaced with **pure Android Canvas drawing** (no Compose). The 9:16
+  share card is rendered directly to a Bitmap using `Paint`, `LinearGradient`,
+  `RadialGradient`, and `drawText`. No window dependency.
+
+---
+
 ## Verification
 - `./gradlew assembleDebug` compiles clean (zero warnings on touched files).
 - All Room interactions off the main thread (`Dispatchers.IO`).
 - No UI leaks when the tile panel is dismissed.
 - Device checks:
-  - Notification shows the custom HUD (shield + timer + cyan "X Pings
-    Deflected" + "End" button) — NOT the default text layout.
-  - Ping count increments in real time when a blocked app tries to connect.
+  - Notification shows the custom HUD (shield + timer + cyan "X Distractions
+    Intercepted" + "End" button) — NOT the default text layout.
+  - Distraction count increments in real time when a blocked app tries to
+    connect.
   - "End session" (notification button OR tile OR app toggle) → tile AND panel
     both show OFF (no desync).
   - Tile tap before onboarding → forces Welcome screen.
@@ -256,3 +304,10 @@ Replaced the centered "NullFlow" + tagline with a top-left asymmetrical HUD
     Stay dismisses.
   - App picker: icons show a placeholder circle immediately (not empty) while
     loading; icon fades in on top.
+  - MainScreen: bottom dashboard (Radar + Stats) stays visible when shield is
+    ON with multiple apps selected (no overflow).
+  - Radar: app name labels visible at each vertex. Scrub shows "AppName · N
+    intercepted".
+  - Empty state: "Choose apps to shield" button has dark bg + cyan border.
+  - Onboarding: SwipeToArmSlider and QS button have matching 56dp/16dp geometry.
+  - Share dossier: generates PNG without crashing (no windowRecomposer error).

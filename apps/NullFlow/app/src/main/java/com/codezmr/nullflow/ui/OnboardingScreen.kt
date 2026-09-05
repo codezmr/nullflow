@@ -967,8 +967,8 @@ private fun SwipeToArmSlider(
         }
     }
 
-    val thumbSize = 56.dp
-    val trackHeight = 64.dp
+    val thumbSize = 44.dp
+    val trackHeight = 56.dp
     val density = LocalDensity.current
 
     // Detent-based haptics: fire TextHandleMove every ~15% of travel.
@@ -1014,7 +1014,7 @@ private fun SwipeToArmSlider(
                 val paddingPx = with(density) { 8.dp.toPx() } // 4.dp start + 4.dp end
                 maxTravel = (trackWidthPx - thumbWidthPx - paddingPx).coerceAtLeast(0f)
             }
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
             // Track background: dark grey when locked, cyan gradient when unlocked.
             .background(
                 brush = if (unlocked)
@@ -1032,11 +1032,11 @@ private fun SwipeToArmSlider(
             .border(
                 width = 1.dp,
                 color = if (unlocked) NeonCyan.copy(alpha = 0.5f) else Color(0xFF222733),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(16.dp)
             )
             .shadow(
                 elevation = if (unlocked) 8.dp else 3.dp,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
                 ambientColor = if (unlocked) NeonCyan.copy(alpha = 0.3f) else Color.Transparent,
                 spotColor = if (unlocked) NeonCyan.copy(alpha = 0.3f) else Color.Transparent
             ),
@@ -1183,7 +1183,7 @@ private fun QsTilePinSection(
                     .border(1.dp, border, RoundedCornerShape(16.dp))
                     .background(bg)
                     .clickable(enabled = !tileAdded && !tileRequesting, onClick = onPinClick)
-                    .height(54.dp),
+                    .height(56.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

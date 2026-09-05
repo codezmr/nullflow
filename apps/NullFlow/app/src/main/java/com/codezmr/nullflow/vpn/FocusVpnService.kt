@@ -337,7 +337,7 @@ class FocusVpnService : VpnService() {
      *
      * The blackhole tunnel drops packets silently — but the OS still hands us
      * the byte stream on the interface fd. By actively READING that stream we
-     * can count every connection attempt a blocked app makes ("pings deflected")
+     * can count every connection attempt a blocked app makes ("distractions intercepted")
      * and then discard the payload (strict zero-data privacy: we never inspect,
      * log, or store the bytes).
      *
@@ -510,7 +510,7 @@ class FocusVpnService : VpnService() {
         val secs = (elapsed / 1000) % 60
         val timer = String.format("%02d:%02d", mins, secs)
         val pings = deflectedPings.get()
-        val pingsText = "$pings Ping${if (pings == 1) "" else "s"} Deflected"
+        val pingsText = "$pings Distraction${if (pings == 1) "" else "s"} Intercepted"
 
         val contentIntent = PendingIntent.getActivity(
             this, 0,
@@ -526,7 +526,7 @@ class FocusVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // ---- Custom "Pings Deflected" HUD (RemoteViews) ----
+        // ---- Custom "Distractions Intercepted" HUD (RemoteViews) ----
         val views = RemoteViews(packageName, R.layout.notification_focus_hud)
         views.setTextViewText(R.id.tv_timer, timer)
         views.setTextViewText(R.id.tv_pings, pingsText)

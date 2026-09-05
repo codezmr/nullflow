@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,10 +32,13 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.data.BlockedApp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -217,8 +219,47 @@ fun FocusRadarGraph(
             }
         }
 
-        // ---- 4) Floating scrub label ----
-        if (scrubbedNode in 0 until vertices.size && vertices[scrubbedNode] > 0f && canvasSize > 0f) {
+        // ---- 4) Vertex labels: app names at each data node ----
+        // Positioned at the same coordinates as the Canvas data nodes. Only
+        // shown for apps with data (deflectedCount > 0).
+        if (canvasSize > 0f) {
+            val density = LocalDensity.current
+            val cx = canvasSize / 2f
+            val cy = canvasSize / 2f
+            val radius = canvasSize / 2f * 0.82f
+            apps.take(6).forEachIndexed { i, app ->
+                if (app.deflectedCount > 0) {
+                    val norm = (app.deflectedCount.toFloat() / maxValue).coerceIn(0f, 1f) * revealAnim
+                    val r = radius * norm
+                    val vx = cx + (r * cos(angles[i])).toFloat()
+                    val vy = cy + (r * sin(angles[i])).toFloat()
+                    // Offset the label slightly outward from the node so it
+                    // doesn't overlap the circle.
+                    val labelOffset = with(density) { 18.dp.toPx() }
+                    val lx = vx + (labelOffset * cos(angles[i])).toFloat()
+                    val ly = vy + (labelOffset * sin(angles[i])).toFloat()
+                    Text(
+                        text = app.appName.take(12),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFA0A0A0),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset {
+                                IntOffset(
+                                    (lx - 30).toInt(),
+                                    (ly - 8).toInt()
+                                )
+                            }
+                    )
+                }
+            }
+        }
+
+        // ---- 5) Floating scrub label (app name + count) ----
+        if (scrubbedNode in 0 until apps.size && apps[scrubbedNode].deflectedCount > 0 && canvasSize > 0f) {
             val labelX = (dragX / canvasSize).coerceIn(0.15f, 0.85f)
             Box(
                 modifier = Modifier
@@ -226,15 +267,17 @@ fun FocusRadarGraph(
                     .padding(horizontal = 12.dp)
             ) {
                 Text(
-                    text = "${vertices[scrubbedNode].toInt()} deflected",
+                    text = "${apps[scrubbedNode].appName.take(14)} · ${apps[scrubbedNode].deflectedCount} intercepted",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF00E5FF),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .offset {
                             IntOffset(
-                                (labelX * canvasSize - 60).toInt(),
+                                (labelX * canvasSize - 80).toInt(),
                                 8.dp.roundToPx()
                             )
                         }

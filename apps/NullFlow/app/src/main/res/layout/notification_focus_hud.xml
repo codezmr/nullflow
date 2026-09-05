@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  "Pings Deflected" HUD — custom RemoteViews layout for the persistent VPN
-  notification.
+  "Distractions Intercepted" HUD — custom RemoteViews layout for the persistent
+  VPN notification.
 
   OEM-SAFETY RULES (heavily skinned OSes reflow layouts aggressively):
    - LinearLayout only (NO ConstraintLayout — OEMs mangle it in RemoteViews).
@@ -50,7 +50,7 @@
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Timer + Pings Deflected (single line, cyan accent) -->
+        <!-- Timer + Distractions Intercepted (single line, cyan accent) -->
         <TextView
             android:id="@+id/tv_timer"
             android:layout_width="match_parent"
@@ -67,7 +67,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="1dp"
-            android:text="0 Pings Deflected"
+            android:text="0 Distractions Intercepted"
             android:textColor="#FF00E5FF"
             android:textSize="13sp"
             android:textStyle="bold"

@@ -3,36 +3,11 @@ package com.codezmr.nullflow.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color as GColor
+import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Rect
-import android.view.View
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import android.graphics.RectF
+import android.graphics.Shader
 import com.codezmr.nullflow.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -73,7 +48,7 @@ object DossierGenerator {
     ): String? = withContext(Dispatchers.IO) {
         try {
             val appContext = context.applicationContext
-            val bitmap = renderCard(appContext, totalFocusMs, totalDeflected, completedSessions)
+            val bitmap = renderCard(totalFocusMs, totalDeflected, completedSessions)
             val file = File(appContext.cacheDir, "nullflow_dossier.png")
             file.outputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -88,206 +63,132 @@ object DossierGenerator {
     }
 
     /**
-     * Render the 9:16 share card into a Bitmap.
-     *
-     * Uses an off-screen [ComposeView] sized to the card dimensions, then
-     * [View.drawToBitmap] to capture it. Runs on the caller's dispatcher
-     * (Dispatchers.IO when called from [generateAndSave]).
+     * Render the 9:16 share card into a Bitmap using pure Android Canvas
+     * drawing (no Compose — avoids the windowRecomposer crash when rendering
+     * off-screen).
      */
     private fun renderCard(
-        context: Context,
         totalFocusMs: Long,
         totalDeflected: Long,
         completedSessions: Int
     ): Bitmap {
-        val composeView = ComposeView(context)
-        composeView.setContent {
-            NullFlowTheme {
-                DossierCard(
-                    totalFocusMs = totalFocusMs,
-                    totalDeflected = totalDeflected,
-                    completedSessions = completedSessions
-                )
-            }
-        }
-        // Measure + layout the view at the exact card size.
-        composeView.measure(
-            View.MeasureSpec.makeMeasureSpec(CARD_WIDTH_PX, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(CARD_HEIGHT_PX, View.MeasureSpec.EXACTLY)
-        )
-        composeView.layout(0, 0, CARD_WIDTH_PX, CARD_HEIGHT_PX)
-        // Force a frame so Compose lays out its content before capture.
-        composeView.draw(Canvas())
-
-        val bitmap = Bitmap.createBitmap(
-            CARD_WIDTH_PX, CARD_HEIGHT_PX, Bitmap.Config.ARGB_8888
-        )
+        val bitmap = Bitmap.createBitmap(CARD_WIDTH_PX, CARD_HEIGHT_PX, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        composeView.draw(canvas)
+        val w = CARD_WIDTH_PX.toFloat()
+        val h = CARD_HEIGHT_PX.toFloat()
+
+        // ---- Background: vertical gradient (dark) ----
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                0f, 0f, 0f, h,
+                intArrayOf(0xFF0A0C10.toInt(), 0xFF12161F.toInt(), 0xFF0A0C10.toInt()),
+                floatArrayOf(0f, 0.5f, 1f),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, w, h, bgPaint)
+
+        // ---- Subtle cyan glow (top-center radial) ----
+        val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.RadialGradient(
+                w / 2f, h * 0.25f, 900f,
+                intArrayOf(0x1F00E5FF.toInt(), 0x0000E5FF.toInt()),
+                floatArrayOf(0f, 1f),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, w, h, glowPaint)
+
+        // ---- Text paints ----
+        val whitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFE6EAF0.toInt()
+            textAlign = Paint.Align.CENTER
+        }
+        val cyanPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF00E5FF.toInt()
+            textAlign = Paint.Align.CENTER
+        }
+        val darkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF0A0C10.toInt()
+            textAlign = Paint.Align.CENTER
+        }
+
+        val focusText = formatFocusDuration(totalFocusMs)
+        val dateText = SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date())
+
+        // ---- Brand mark: cyan circle with "N" ----
+        val brandRadius = 96f
+        val brandCx = w / 2f
+        val brandCy = 200f
+        val brandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                brandCx - brandRadius, brandCy - brandRadius,
+                brandCx + brandRadius, brandCy + brandRadius,
+                intArrayOf(0xFF00E5FF.toInt(), 0xFF4F8CFF.toInt()),
+                null, Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawCircle(brandCx, brandCy, brandRadius, brandPaint)
+        darkPaint.textSize = 52f
+        darkPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText("N", brandCx, brandCy + 18f, darkPaint)
+
+        // ---- Brand name ----
+        whitePaint.textSize = 44f
+        canvas.drawText("NullFlow", w / 2f, brandCy + brandRadius + 50f, whitePaint)
+        whitePaint.alpha = 128
+        whitePaint.textSize = 22f
+        canvas.drawText("Disconnect on your terms.", w / 2f, brandCy + brandRadius + 85f, whitePaint)
+        whitePaint.alpha = 255
+
+        // ---- Hero stat: total focus time ----
+        cyanPaint.textSize = 88f
+        canvas.drawText(focusText, w / 2f, 700f, cyanPaint)
+        whitePaint.alpha = 178
+        whitePaint.textSize = 26f
+        canvas.drawText("of deep focus achieved", w / 2f, 750f, whitePaint)
+        whitePaint.alpha = 255
+
+        // ---- Secondary stats row ----
+        val statY = 950f
+        val statValuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFE6EAF0.toInt()
+            textAlign = Paint.Align.CENTER
+            textSize = 48f
+        }
+        val statLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0x73E6EAF0.toInt() // 0.45 alpha
+            textAlign = Paint.Align.CENTER
+            textSize = 20f
+        }
+        // Left stat: distractions intercepted
+        canvas.drawText("$totalDeflected", w * 0.3f, statY, statValuePaint)
+        canvas.drawText("distractions intercepted", w * 0.3f, statY + 35f, statLabelPaint)
+        // Right stat: focus sessions
+        canvas.drawText("$completedSessions", w * 0.7f, statY, statValuePaint)
+        canvas.drawText("focus sessions", w * 0.7f, statY + 35f, statLabelPaint)
+
+        // ---- Footer: date + tagline (rounded rect) ----
+        val footerRect = RectF(72f, h - 200f, w - 72f, h - 80f)
+        val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0x991A1D24.toInt() // 0.6 alpha
+        }
+        canvas.drawRoundRect(footerRect, 24f, 24f, footerPaint)
+        whitePaint.alpha = 128
+        whitePaint.textSize = 22f
+        canvas.drawText(dateText, w / 2f, h - 155f, whitePaint)
+        whitePaint.alpha = 255
+        cyanPaint.textSize = 24f
+        canvas.drawText("Stay focused. Stay free.", w / 2f, h - 115f, cyanPaint)
+
         return bitmap
     }
-}
 
-/**
- * The 9:16 share card layout. Pure Compose — no side effects, so it can be
- * rendered off-screen for capture.
- */
-@Composable
-private fun DossierCard(
-    totalFocusMs: Long,
-    totalDeflected: Long,
-    completedSessions: Int
-) {
-    val focusText = formatFocusDuration(totalFocusMs)
-    val dateText = SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date())
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0A0C10),
-                        Color(0xFF12161F),
-                        Color(0xFF0A0C10)
-                    )
-                )
-            )
-    ) {
-        // Subtle glassmorphic glow (top-center radial).
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF00E5FF).copy(alpha = 0.12f),
-                            Color(0xFF00E5FF).copy(alpha = 0f)
-                        ),
-                        center = Offset(0.5f, 0.25f),
-                        radius = 900f
-                    )
-                )
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 72.dp, vertical = 120.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // ---- Brand mark ----
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(Color(0xFF00E5FF), Color(0xFF4F8CFF))
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "N",
-                    fontSize = 52.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF0A0C10)
-                )
-            }
-            Spacer(Modifier.height(28.dp))
-            Text(
-                text = "NullFlow",
-                fontSize = 44.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFFE6EAF0)
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Disconnect on your terms.",
-                fontSize = 22.sp,
-                color = Color(0xFFE6EAF0).copy(alpha = 0.5f)
-            )
-
-            Spacer(Modifier.height(96.dp))
-
-            // ---- Hero stat: total focus time ----
-            Text(
-                text = focusText,
-                fontSize = 88.sp,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF00E5FF)
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "of deep focus achieved",
-                fontSize = 26.sp,
-                color = Color(0xFFE6EAF0).copy(alpha = 0.7f)
-            )
-
-            Spacer(Modifier.height(72.dp))
-
-            // ---- Secondary stats row ----
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                DossierStatCell(value = "$totalDeflected", label = "pings deflected")
-                DossierStatCell(value = "$completedSessions", label = "focus sessions")
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            // ---- Footer: date + tagline ----
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0xFF1A1D24).copy(alpha = 0.6f))
-                    .padding(vertical = 28.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = dateText,
-                        fontSize = 22.sp,
-                        color = Color(0xFFE6EAF0).copy(alpha = 0.5f)
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Stay focused. Stay free.",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF00E5FF)
-                    )
-                }
-            }
-        }
+    private fun formatFocusDuration(ms: Long): String {
+        if (ms <= 0) return "0m"
+        val totalSec = ms / 1000
+        val h = totalSec / 3600
+        val m = (totalSec % 3600) / 60
+        return if (h > 0) "${h}h ${m}m" else "${m}m"
     }
-}
-
-@Composable
-private fun DossierStatCell(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            fontSize = 48.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFE6EAF0)
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = label,
-            fontSize = 20.sp,
-            color = Color(0xFFE6EAF0).copy(alpha = 0.45f)
-        )
-    }
-}
-
-private fun formatFocusDuration(ms: Long): String {
-    if (ms <= 0) return "0m"
-    val totalSec = ms / 1000
-    val h = totalSec / 3600
-    val m = (totalSec % 3600) / 60
-    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
