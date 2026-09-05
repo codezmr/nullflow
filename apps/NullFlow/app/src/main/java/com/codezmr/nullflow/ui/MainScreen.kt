@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -285,23 +287,53 @@ private fun HeroToggle(isActive: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .size(220.dp)
             .scale(scale)
+            // 3D extruded hardware feel:
+            //  1) Dark, offset drop-shadow to the bottom-right (depth).
             .shadow(
-                elevation = if (isActive) 24.dp else 10.dp,
+                elevation = if (isActive) 26.dp else 14.dp,
                 shape = CircleShape,
-                clip = false
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.55f),
+                spotColor = Color.Black.copy(alpha = 0.55f)
             )
             .background(
                 color = if (isActive) Color(0xFF4F8CFF).copy(alpha = glowAlpha) else Color.Transparent,
                 shape = CircleShape
             )
             .padding(14.dp)
+            //  2) Body with a top-left light → bottom-right dark gradient (bevel).
             .background(
-                color = if (isActive) Color(0xFF101826) else Color(0xFF1A1D24),
+                brush = Brush.linearGradient(
+                    colors = if (isActive)
+                        listOf(Color(0xFF1B2A44), Color(0xFF0C1420))
+                    else
+                        listOf(Color(0xFF23272F), Color(0xFF14171D)),
+                    start = Offset(0f, 0f),
+                    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                ),
                 shape = CircleShape
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
+        //  3) Subtle semi-transparent white highlight on the top-left (specular).
+        Box(
+            modifier = Modifier
+                .size(220.dp)
+                .padding(14.dp)
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.10f),
+                            Color.White.copy(alpha = 0f)
+                        ),
+                        center = Offset(70f, 70f),
+                        radius = 260f
+                    )
+                )
+        )
+
         // Inner ring
         Box(
             modifier = Modifier

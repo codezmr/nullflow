@@ -1,22 +1,29 @@
 package com.codezmr.nullflow.ui.tile
 
 import android.content.Context
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Divider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
@@ -30,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -38,7 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusDatabase
-import com.codezmr.nullflow.data.ProfileWithCount
+import com.codezmr.nullflow.data.ProfileWithAppsRow
 import com.codezmr.nullflow.vpn.FocusVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -73,9 +81,21 @@ fun TileFocusPanel(
     val dao: FocusDao = remember { FocusDatabase.get(context).focusDao() }
 
     // ---- Reactive state from Room ----
-    val profiles by dao.observeProfilesWithAppCount().collectAsState(initial = emptyList())
+    // One row per (profile, blocked-app). Group by profile id → a mode with its
+    // list of blocked package names (for the icon row).
+    val profileRows by dao.observeProfilesWithApps().collectAsState(initial = emptyList())
     val activeProfile by dao.observeActiveProfile().collectAsState(initial = null)
     val runningSession by dao.observeRunningSession().collectAsState(initial = null)
+
+    // Grouped: profile id → (name, isActive, list of package names).
+    val grouped = remember(profileRows) {
+        val map = LinkedHashMap<Long, ModeWithApps>()
+        for (row in profileRows) {
+            val mode = map.getOrPut(row.id) { ModeWithApps(row.id, row.name, row.isActive) }
+            row.packageName?.let { mode.packages.add(it) }
+        }
+        map.values.toList()
+    }
 
     // Shield is ON only when there's an active profile AND a live session.
     val isShieldOn = activeProfile != null && runningSession != null
@@ -131,13 +151,13 @@ fun TileFocusPanel(
     }
 
     // ---- Mode selection ----
-    fun onModeSelected(profile: ProfileWithCount) {
+    fun onModeSelected(mode: ModeWithApps) {
         scope.launch {
             withContext(Dispatchers.IO) {
                 try {
                     dao.clearActive()
-                    dao.setActive(profile.id, true)
-                    AppLog.d("TilePanel: profile '${profile.name}' (id=${profile.id}) set active")
+                    dao.setActive(mode.id, true)
+                    AppLog.d("TilePanel: profile '${mode.name}' (id=${mode.id}) set active")
                 } catch (e: Exception) {
                     AppLog.e("TilePanel: set active FAILED", e)
                 }
@@ -202,8 +222,8 @@ fun TileFocusPanel(
         )
         Spacer(Modifier.height(8.dp))
 
-        // ---- Profiles list ----
-        if (profiles.isEmpty()) {
+        // ---- Profiles list (with app-icon rows) ----
+        if (grouped.isEmpty()) {
             Text(
                 text = "No modes yet. Tap below to create one.",
                 color = PanelMuted,
@@ -212,16 +232,16 @@ fun TileFocusPanel(
             )
         } else {
             LazyColumn(
-                modifier = Modifier.heightIn(max = 240.dp)
+                modifier = Modifier.heightIn(max = 300.dp)
             ) {
-                items(profiles, key = { it.id }) { profile ->
-                    val isSelected = activeProfile?.id == profile.id
+                items(grouped, key = { it.id }) { mode ->
+                    val isSelected = activeProfile?.id == mode.id
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isSelected) PanelSelectedRow else Color.Transparent)
-                            .clickable { onModeSelected(profile) }
+                            .clickable { onModeSelected(mode) }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -233,16 +253,24 @@ fun TileFocusPanel(
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = profile.name,
+                                text = mode.name,
                                 color = if (isSelected) Color.White else PanelTextDim,
                                 fontSize = 16.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                             )
-                            Text(
-                                text = "${profile.appCount} app${if (profile.appCount == 1) "" else "s"} shielded",
-                                color = PanelMuted,
-                                fontSize = 12.sp
-                            )
+                            Spacer(Modifier.height(6.dp))
+                            // Visual mode selector: a scrollable row of the
+                            // blocked apps' icons (24dp circles, 8dp spacing)
+                            // with a right-edge gradient fade as a scroll hint.
+                            if (mode.packages.isEmpty()) {
+                                Text(
+                                    text = "No apps yet",
+                                    color = PanelMuted,
+                                    fontSize = 12.sp
+                                )
+                            } else {
+                                AppIconRow(context = context, packages = mode.packages)
+                            }
                         }
                     }
                 }
@@ -279,5 +307,59 @@ fun TileFocusPanel(
                 fontWeight = FontWeight.Medium
             )
         }
+    }
+}
+
+/** A focus mode grouped with its blocked apps' package names. */
+private data class ModeWithApps(
+    val id: Long,
+    val name: String,
+    val isActive: Boolean,
+    val packages: MutableList<String> = mutableListOf()
+)
+
+/**
+ * A horizontal, scrollable row of blocked-app icons (24dp circles, 8dp
+ * spacing) with a right-edge gradient fade so the user knows the list extends
+ * off-screen. Icons load off the main thread and are cached in memory.
+ */
+@Composable
+private fun AppIconRow(context: Context, packages: List<String>) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(packages, key = { it }) { pkg ->
+                val painter = rememberAppIconPainter(context, pkg)
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E2430))
+                ) {
+                    Image(
+                        painter = painter,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+        // Right-edge gradient fade (scroll hint) — only meaningful when there's
+        // more content to the right.
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(36.dp)
+                .fillMaxHeight()
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            PanelBg.copy(alpha = 0f),
+                            PanelBg.copy(alpha = 0.9f)
+                        )
+                    )
+                )
+        )
     }
 }

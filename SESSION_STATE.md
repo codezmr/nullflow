@@ -15,6 +15,56 @@
 
 ---
 
+## ✅ Current Status: BUILT — Architecture Polish & UX Improvements (all 6 done)
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+**Spec:** `doc/POLISH_SPEC.md` (all Q1–Q6 = Option A, approved by Zamir).
+
+### What changed (all Option A)
+1. **Q1 — live notification timer:** `FocusVpnService.startTimerUpdates` now
+   ticks every **1s** (`delay(1_000)`) instead of 30s.
+2. **Q2 — "End session" desync FIXED:** `FocusVpnService.teardown()` now calls
+   `clearRoomSession()` (ends running session + deactivates profile) on a fresh
+   one-shot scope (serviceScope is already cancelled). EVERY stop path (app
+   toggle / notification / QS tile) now keeps Room in lockstep → tile + panel
+   can't disagree.
+3. **Q3 — QS onboarding gate:** `FocusTileService.onClick()` checks
+   `Settings.hasOnboarded`; if false → skips the panel and forces MainActivity
+   (Welcome) + collapses. Also fixed `startActivityAndCollapse` to use a
+   **PendingIntent** (Intent form is disallowed on Android 15 — was crashing in
+   logs).
+4. **Q4 — "Focus Matrix" app picker (NO checkboxes):** `AppPickerSheet` fully
+   overhauled — sticky dark-glass search bar (filters all), one-tap Preset
+   Chips (💬 Social Noise / 🎬 Media Binge / 💬 Chat Drops, from
+   `PackageManagerRepo.presets`), Tactile App Cards (unselected `#12151C` +
+   `+ ADD` + desaturated icon; selected cyan glow `#00E5FF` + `🔒 SHIELDED` +
+   icon halo), micro-spring press (0.96× bouncy) + `Haptics.thud` (40ms).
+   Icons via built-in `BitmapPainter` (Coil/Accompanist unavailable offline).
+   New `Haptics.thud()`.
+5. **Q5 — hero 3D extrusion:** `MainScreen.HeroToggle` now has a dark offset
+   drop-shadow (bottom-right, ambient+spot black) + top-left light→dark bevel
+   gradient + subtle white radial specular highlight. BreathingHero untouched.
+6. **Q6 — tile panel icon rows:** `TileFocusPanel` now shows a scrollable
+   `LazyRow` of blocked-app icons (24dp circle, 8dp spacing) + right-edge
+   gradient fade per mode. New `ProfileWithAppsRow` Room query
+   (`observeProfilesWithApps`), `AppIconLoader.kt` (PackageManager icon loader
+   + in-memory cache + `rememberAppIconPainter`).
+
+### ⚠️ Still to verify on device
+- Notification timer ticks every second.
+- "End session" → tile AND panel both OFF (no desync).
+- Tile tap before onboarding → forces Welcome.
+- App picker: search filters all; preset chips block/unblock categories;
+  tactile cards + spring + haptic; cyan accents.
+- Hero toggle 3D look.
+- Tile panel: app-icon rows per mode + right-edge fade.
+
+**Next:** Zamir installs, tests all 6. Share `Download/NullFlow/nullflow.log`
+if anything misbehaves.
+
+---
+
 ## 🚧 In Progress: Architecture Polish & UX Improvements
 
 **Spec:** `doc/POLISH_SPEC.md` (all Q1–Q6 = Option A, approved by Zamir).
@@ -27,8 +77,12 @@
    Room session + deactivates the profile (so tile + panel agree).
 3. **Q3** — QS onboarding gate: `FocusTileService.onClick()` checks
    `Settings.hasOnboarded`; if false → launch MainActivity (Welcome) + collapse.
-4. **Q4** — app picker: sticky search bar (filters all) + "Suggested" cluster
-   (installed high-distraction apps from `targetPackages`) at top.
+4. **Q4 (UPGRADED → "Focus Matrix")** — app picker full overhaul, NO
+   checkboxes: sticky dark-glass search bar (filters all) + one-tap Preset
+   Chips (💬 Social Noise / 🎬 Media Binge / 💬 Chat Drops) + Tactile App Cards
+   (unselected `#12151C` + `+ ADD`; selected cyan glow `#00E5FF` + `🔒 SHIELDED`
+   + icon halo) + micro-spring press (0.96× bouncy) + thud haptic. Icons via
+   built-in `BitmapPainter` (Coil/Accompanist unavailable offline).
 5. **Q5** — `HeroToggle` (MainScreen only) gets a 3D extruded look (dark
    bottom-right shadow + white top-left highlight). BreathingHero stays flat.
 6. **Q6** — tile panel: replace "N apps shielded" text with a `LazyRow` of

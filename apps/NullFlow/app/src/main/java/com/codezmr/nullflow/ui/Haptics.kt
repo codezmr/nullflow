@@ -39,6 +39,16 @@ object Haptics {
     fun disengage(context: Context) {
         vibrator(context)?.vibrate(VibrationEffect.createOneShot(70, 180))
     }
+
+    /**
+     * Crisp "locking a physical latch" thud for the Focus Matrix tactile cards
+     * (40ms, full amplitude).
+     */
+    fun thud(context: Context) {
+        vibrator(context)?.vibrate(
+            VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
+        )
+    }
 }
 
 /** Convenience composable accessor. */

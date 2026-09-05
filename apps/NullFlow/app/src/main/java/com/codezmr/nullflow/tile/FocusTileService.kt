@@ -1,5 +1,6 @@
 package com.codezmr.nullflow.tile
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.drawable.Icon
 import android.service.quicksettings.Tile
@@ -21,6 +22,7 @@ import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.MainActivity
 import com.codezmr.nullflow.R
 import com.codezmr.nullflow.data.FocusDatabase
+import com.codezmr.nullflow.data.Settings
 import com.codezmr.nullflow.ui.tile.TileFocusPanel
 import com.codezmr.nullflow.vpn.FocusVpnService
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -81,6 +83,17 @@ class FocusTileService : TileService() {
     override fun onClick() {
         super.onClick()
         AppLog.d("FocusTileService.onClick")
+
+        // Onboarding gate: the shield must NOT be usable before the user has
+        // completed the Welcome/Consent screen (which is where the VPN consent
+        // is granted). If not onboarded, skip the panel entirely and force the
+        // main app (which shows Welcome) — collapsing the shade.
+        if (!Settings.get(this).hasOnboarded) {
+            AppLog.d("not onboarded → forcing MainActivity (Welcome screen)")
+            openMainActivity()
+            return
+        }
+
         // If the device is locked, we must unlock before showing a dialog.
         if (isLocked) {
             AppLog.d("device locked → unlockAndRun")
@@ -157,13 +170,18 @@ class FocusTileService : TileService() {
 
     private fun openMainActivity() {
         // startActivityAndCollapse collapses the shade and launches the app.
-        // FLAG_ACTIVITY_NEW_TASK is required when starting from a Service.
+        // On Android 15 the Intent overload is disallowed — it requires a
+        // PendingIntent. FLAG_ACTIVITY_NEW_TASK is required from a Service.
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         try {
-            startActivityAndCollapse(intent)
-            AppLog.d("startActivityAndCollapse → MainActivity")
+            startActivityAndCollapse(pendingIntent)
+            AppLog.d("startActivityAndCollapse(PendingIntent) → MainActivity")
         } catch (e: Exception) {
             AppLog.e("startActivityAndCollapse FAILED, falling back to startActivity", e)
             startActivity(intent)

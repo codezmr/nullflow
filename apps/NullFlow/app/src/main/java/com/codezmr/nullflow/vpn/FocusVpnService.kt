@@ -144,9 +144,45 @@ class FocusVpnService : VpnService() {
         } catch (e: Exception) {
             AppLog.e("teardown: cancel notification failed", e)
         }
-        // 4) Stop the service.
+        // 4) Reconcile Room: end any running session + deactivate the profile.
+        // This is the fix for the "End session" desync: the notification's
+        // ACTION_STOP only stopped the service before, leaving a stale running
+        // session in Room (so the tile showed OFF but the panel showed ON).
+        // Now EVERY stop path cleans Room. Idempotent — no-op if no session.
+        clearRoomSession()
+        // 5) Stop the service.
         stopSelf()
         AppLog.d("teardown: COMPLETE — service stopping")
+    }
+
+    /**
+     * End the running focus session (if any) and deactivate its profile in
+     * Room. Runs on the service's IO scope. Safe to call when nothing is
+     * running (it just no-ops). This keeps Room in lockstep with the service
+     * no matter which surface (app toggle / notification / QS tile) stopped it.
+     */
+    private fun clearRoomSession() {
+        // Use a FRESH scope: teardown() has already cancelled serviceScope, so
+        // launching on it would be immediately cancelled. This one-shot scope
+        // runs the Room cleanup to completion, then cancels itself.
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope.launch {
+            try {
+                val dao = FocusDatabase.get(this@FocusVpnService).focusDao()
+                val running = dao.getRunningSession()
+                if (running != null) {
+                    dao.endSession(running.id, System.currentTimeMillis())
+                    dao.setActive(running.profileId, false)
+                    AppLog.d("clearRoomSession: session ${running.id} ended, profile ${running.profileId} deactivated")
+                } else {
+                    AppLog.d("clearRoomSession: no running session (no-op)")
+                }
+            } catch (e: Exception) {
+                AppLog.e("clearRoomSession FAILED", e)
+            } finally {
+                scope.cancel()
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -382,11 +418,11 @@ class FocusVpnService : VpnService() {
         return notification
     }
 
-    /** Refresh the notification timer every 30s while active. */
+    /** Refresh the notification timer every 1s while active (live ticking). */
     private fun startTimerUpdates() {
         serviceScope.launch {
             while (shouldRun) {
-                delay(30_000)
+                delay(1_000)
                 if (shouldRun && interfaceFd != null) {
                     try {
                         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)

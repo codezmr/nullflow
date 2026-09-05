@@ -1,8 +1,15 @@
 package com.codezmr.nullflow.ui
 
-import androidx.compose.foundation.Image
+import android.graphics.Bitmap
+import android.os.VibrationEffect
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,13 +23,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -35,11 +46,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.BlockedApp
 import com.codezmr.nullflow.data.FocusDao
@@ -47,10 +66,25 @@ import com.codezmr.nullflow.data.InstalledApp
 import com.codezmr.nullflow.data.PackageManagerRepo
 import kotlinx.coroutines.launch
 
+// ---- Focus Matrix palette ----
+private val CardUnselected = Color(0xFF12151C)
+private val CardSelected = Color(0xFF15222E)
+private val BorderUnselected = Color(0xFF222733)
+private val AccentCyan = Color(0xFF00E5FF)
+private val GlassSurface = Color(0xFF141820)
+private val MutedText = Color(0xFFA0A0A0)
+private val BadgeUnselected = Color(0xFF1E2430)
+
 /**
- * The app picker — a bottom sheet (not a new screen) so the user stays
- * grounded on the main interface. Multi-select checkboxes assign apps to the
- * active FocusProfile.
+ * "The Focus Matrix" — the app picker, redesigned with NO checkboxes.
+ *
+ *  - Sticky dark-glass search bar (filters the entire list by label).
+ *  - One-tap Preset Chips (Social Noise / Media Binge / Chat Drops) that
+ *    block/unblock a whole category in one tap.
+ *  - Tactile App Cards: unselected = dark + "+ ADD"; selected = cyan glow +
+ *    "🔒 SHIELDED" + vibrant icon with a radial halo. Micro-spring press +
+ *    thud haptic.
+ *  - "Done · N apps selected" bar at the bottom.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +104,9 @@ fun AppPickerSheet(
     val blocked by dao.observeBlockedApps(profileId).collectAsState(initial = emptyList())
     val blockedPackages = remember(blocked) { blocked.map { it.packageName }.toSet() }
 
+    // Search query (filters the whole list).
+    var query by remember { mutableStateOf("") }
+
     // Load installed apps once.
     LaunchedEffect(Unit) {
         if (!loaded) {
@@ -78,6 +115,12 @@ fun AppPickerSheet(
             loaded = true
             AppLog.d("AppPicker: loaded ${installed.size} apps")
         }
+    }
+
+    // Filter by search (case-insensitive on label).
+    val filtered = remember(installed, query) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) installed else installed.filter { it.label.lowercase().contains(q) }
     }
 
     ModalBottomSheet(
@@ -96,7 +139,7 @@ fun AppPickerSheet(
         }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header
+            // ---- Header ----
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -111,61 +154,103 @@ fun AppPickerSheet(
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "${blockedPackages.size} selected",
+                    text = "$blockedPackages.size Shielded",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = AccentCyan,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
 
-            // App list
+            // ---- Sticky search bar (dark glass) ----
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 12.dp),
+                placeholder = { Text("Search apps...", color = MutedText) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = AccentCyan,
+                    unfocusedBorderColor = BorderUnselected,
+                    cursorColor = AccentCyan,
+                    focusedContainerColor = GlassSurface,
+                    unfocusedContainerColor = GlassSurface
+                )
+            )
+
+            // ---- One-tap preset chips (only when not searching) ----
+            if (query.isBlank()) {
+                Text(
+                    text = "ONE-TAP PRESETS",
+                    color = MutedText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 28.dp, bottom = 8.dp)
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(repo.presets) { preset ->
+                        PresetChip(
+                            preset = preset,
+                            installed = installed,
+                            blockedPackages = blockedPackages,
+                            onToggle = {
+                                Haptics.tick(context)
+                                togglePreset(dao, scope, profileId, preset, installed, blockedPackages)
+                            }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // ---- Section label ----
+            Text(
+                text = if (query.isBlank()) "ALL APPS" else "RESULTS",
+                color = MutedText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 28.dp, bottom = 8.dp)
+            )
+
+            // ---- Tactile app cards ----
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(installed, key = { it.packageName }) { app ->
-                    val checked = app.packageName in blockedPackages
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                Haptics.tick(context)
-                                toggleApp(dao, scope, profileId, app, checked)
-                            }
-                            .padding(horizontal = 24.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Icon
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                bitmap = app.icon.asImageBitmap(),
-                                contentDescription = app.label,
-                                modifier = Modifier.size(28.dp)
-                            )
+                items(filtered, key = { it.packageName }) { app ->
+                    TactileAppCard(
+                        appName = app.label,
+                        icon = app.icon,
+                        isShielded = app.packageName in blockedPackages,
+                        onToggle = {
+                            Haptics.thud(context)
+                            toggleApp(dao, scope, profileId, app, app.packageName in blockedPackages)
                         }
-                        Spacer(Modifier.width(14.dp))
+                    )
+                }
+                if (filtered.isEmpty()) {
+                    item {
                         Text(
-                            text = app.label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = {
-                                toggleApp(dao, scope, profileId, app, checked)
-                            }
+                            text = "No apps match \"$query\"",
+                            color = MutedText,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(vertical = 24.dp)
                         )
                     }
                 }
             }
 
-            // ---- Done bar (closes the sheet) ----
+            // ---- Done bar ----
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -177,7 +262,7 @@ fun AppPickerSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.primary)
+                        .background(AccentCyan)
                         .clickable {
                             Haptics.engage(context)
                             AppLog.d("AppPicker: DONE tapped — closing sheet (${blockedPackages.size} apps)")
@@ -193,13 +278,172 @@ fun AppPickerSheet(
                             "Done",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = Color.Black
                     )
                 }
             }
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Preset chip
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun PresetChip(
+    preset: PackageManagerRepo.Preset,
+    installed: List<InstalledApp>,
+    blockedPackages: Set<String>,
+    onToggle: () -> Unit
+) {
+    // Which of this preset's apps are installed?
+    val installedInPreset = remember(installed, preset) {
+        val installedPkgs = installed.map { it.packageName }.toSet()
+        preset.packages.filter { it in installedPkgs }
+    }
+    // All installed preset apps already blocked?
+    val allBlocked = installedInPreset.isNotEmpty() &&
+        installedInPreset.all { it in blockedPackages }
+
+    val bg by animateColorAsState(
+        targetValue = if (allBlocked) AccentCyan.copy(alpha = 0.18f) else GlassSurface,
+        label = "chip_bg"
+    )
+    val border by animateColorAsState(
+        targetValue = if (allBlocked) AccentCyan else BorderUnselected,
+        label = "chip_border"
+    )
+    val text by animateColorAsState(
+        targetValue = if (allBlocked) AccentCyan else Color.White,
+        label = "chip_text"
+    )
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(50.dp))
+            .clickable(enabled = installedInPreset.isNotEmpty(), onClick = onToggle)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = preset.emoji, fontSize = 14.sp)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = preset.label,
+            color = text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tactile app card (replaces the checkbox)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun TactileAppCard(
+    appName: String,
+    icon: Bitmap,
+    isShielded: Boolean,
+    onToggle: () -> Unit
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "card_scale"
+    )
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isShielded) CardSelected else CardUnselected,
+        label = "card_bg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isShielded) AccentCyan else BorderUnselected,
+        label = "card_border"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .shadow(
+                elevation = if (isShielded) 10.dp else 4.dp,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(backgroundColor)
+            .border(
+                width = if (isShielded) 1.5.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Icon (with radial halo when shielded)
+            Box(contentAlignment = Alignment.Center) {
+                if (isShielded) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        AccentCyan.copy(alpha = 0.35f),
+                                        AccentCyan.copy(alpha = 0f)
+                                    )
+                                )
+                            )
+                    )
+                }
+                androidx.compose.foundation.Image(
+                    bitmap = icon.asImageBitmap(),
+                    contentDescription = appName,
+                    // Desaturate (grey out) the icon when unselected; full color
+                    // when shielded. A semi-transparent grey tint reads as "muted".
+                    colorFilter = if (isShielded) null
+                    else ColorFilter.tint(Color(0xFF6B7280)),
+                    alpha = if (isShielded) 1f else 0.55f,
+                    modifier = Modifier.size(40.dp).clip(CircleShape)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Text(
+                text = appName,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+
+        // Action pill badge (replaces the checkbox)
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (isShielded) AccentCyan else BadgeUnselected)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = if (isShielded) "🔒 SHIELDED" else "+ ADD",
+                color = if (isShielded) Color.Black else MutedText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
 
 private fun toggleApp(
     dao: FocusDao,
@@ -211,7 +455,6 @@ private fun toggleApp(
     scope.launch {
         try {
             if (currentlyChecked) {
-                // Remove: find the BlockedApp row for this package + profile.
                 val existing = dao.getBlockedApps(profileId).firstOrNull {
                     it.packageName == app.packageName
                 }
@@ -229,13 +472,63 @@ private fun toggleApp(
                         )
                     )
                 )
-                // Mark this profile active so the hero toggle finds it.
                 dao.clearActive()
                 dao.setActive(profileId, true)
                 AppLog.d("AppPicker: BLOCKED ${app.packageName} in profile $profileId (now active)")
             }
         } catch (e: Exception) {
             AppLog.e("AppPicker: toggle app FAILED", e)
+        }
+    }
+}
+
+/**
+ * One-tap preset: if ALL installed preset apps are already blocked → unblock
+ * them all; otherwise → block them all. Only affects installed apps.
+ */
+private fun togglePreset(
+    dao: FocusDao,
+    scope: kotlinx.coroutines.CoroutineScope,
+    profileId: Long,
+    preset: PackageManagerRepo.Preset,
+    installed: List<InstalledApp>,
+    blockedPackages: Set<String>
+) {
+    scope.launch {
+        try {
+            val installedPkgs = installed.map { it.packageName }.toSet()
+            val presetInstalled = preset.packages.filter { it in installedPkgs }
+            if (presetInstalled.isEmpty()) {
+                AppLog.d("AppPicker: preset '${preset.label}' — no installed apps, no-op")
+                return@launch
+            }
+            val allBlocked = presetInstalled.all { it in blockedPackages }
+            if (allBlocked) {
+                // Unblock all.
+                val existing = dao.getBlockedApps(profileId)
+                for (row in existing) {
+                    if (row.packageName in presetInstalled) {
+                        dao.deleteBlockedApp(row.id)
+                    }
+                }
+                AppLog.d("AppPicker: preset '${preset.label}' UNBLOCKED ${presetInstalled.size} apps")
+            } else {
+                // Block all (need labels).
+                val labelMap = installed.associate { it.packageName to it.label }
+                val toAdd = presetInstalled.map { pkg ->
+                    BlockedApp(
+                        profileId = profileId,
+                        packageName = pkg,
+                        appName = labelMap[pkg] ?: pkg
+                    )
+                }
+                dao.insertBlockedApps(toAdd)
+                dao.clearActive()
+                dao.setActive(profileId, true)
+                AppLog.d("AppPicker: preset '${preset.label}' BLOCKED ${toAdd.size} apps")
+            }
+        } catch (e: Exception) {
+            AppLog.e("AppPicker: toggle preset FAILED", e)
         }
     }
 }

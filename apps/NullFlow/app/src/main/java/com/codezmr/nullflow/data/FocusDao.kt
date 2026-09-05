@@ -41,6 +41,19 @@ interface FocusDao {
     )
     fun observeProfilesWithAppCount(): Flow<List<ProfileWithCount>>
 
+    /**
+     * Reactive list of every profile with its blocked apps' package names,
+     * for the Quick Settings tile panel's icon rows.
+     */
+    @Query(
+        "SELECT p.id AS id, p.name AS name, p.isActive AS isActive, " +
+            "b.packageName AS packageName, b.appName AS appName " +
+            "FROM focus_profiles p " +
+            "LEFT JOIN blocked_apps b ON b.profileId = p.id " +
+            "ORDER BY p.id ASC, b.appName COLLATE NOCASE ASC"
+    )
+    fun observeProfilesWithApps(): Flow<List<ProfileWithAppsRow>>
+
     @Query("UPDATE focus_profiles SET name = :name WHERE id = :id")
     suspend fun renameProfile(id: Long, name: String)
 

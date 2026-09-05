@@ -51,18 +51,42 @@ toggle — it must also end the Room session + deactivate the profile.
 
 ## 2. UI & Aesthetic Polish
 
-### 2.1 App Picker Search + Suggested Cluster (Q4 = A)
-**File:** `ui/AppPickerSheet.kt`
-- **Sticky search bar:** an `OutlinedTextField` at the top of the sheet that
-  filters the app list (by label, case-insensitive). Filters the ENTIRE unified
-  list (Suggested + main).
-- **Suggested cluster:** a "Suggested" group at the very top = the
-  high-distraction apps that are **actually installed**, sourced from the
-  existing `PackageManagerRepo.targetPackages` list (WhatsApp, Instagram,
-  TikTok, Snapchat, Twitter/X, Facebook, Discord, Telegram, etc.). The rest
-  appear alphabetically below.
-- Need `PackageManagerRepo` to expose which packages are "suggested" (or a
-  helper that returns the suggested subset).
+### 2.1 App Picker → "The Focus Matrix" (Q4 upgraded — NO checkboxes)
+**File:** `ui/AppPickerSheet.kt` (full overhaul)
+Replaces the standard Material checkboxes with a high-end, futuristic
+"Focus Matrix". Three pillars:
+
+**(a) Sticky search + One-Tap Preset Chips (top)**
+- **Sticky search:** `OutlinedTextField`, dark glass (`#141820` surface,
+  `#00E5FF` cursor/focus border). Filters the ENTIRE unified list by label
+  (case-insensitive).
+- **Preset chips (`LazyRow`):** one-tap category toggles. Tapping a chip
+  blocks ALL its apps if any are unblocked, else unblocks ALL:
+  - 💬 **Social Noise** → Instagram, X/Twitter, TikTok, Facebook
+  - 🎬 **Media Binge** → YouTube, Netflix, Hotstar
+  - 💬 **Chat Drops** → WhatsApp, Telegram, Discord
+  - (Only apps actually installed are affected.)
+
+**(b) Tactile App Card (replaces the checkbox)**
+- **Unselected:** dark charcoal `#12151C`, muted grey outline `#222733`,
+  desaturated icon, `+ ADD` badge (grey).
+- **Selected:** pops forward, neon-cyan glow `#00E5FF` border, full-color
+  vibrant icon with a radial light halo behind it, `🔒 SHIELDED` cyan pill
+  (black text).
+- **Micro-spring:** tap scales to 0.96× then springs back
+  (`spring(dampingRatio = MediumBouncy)`). Heavy thud haptic on tap
+  (`VibrationEffect.createOneShot(40, DEFAULT_AMPLITUDE)`).
+- Icons rendered via built-in `BitmapPainter` (we already load `Bitmap` in
+  `PackageManagerRepo`) — **NOT** Coil/Accompanist (not available offline).
+
+**(c) Layout**
+- `LazyColumn` with `verticalArrangement = spacedBy(10.dp)`.
+- Preset chips + search are sticky above the scrolling card list.
+- Keep the existing "Done · N apps selected" bar at the bottom.
+
+> NOTE: The earlier "Suggested cluster" idea is superseded by the Preset Chips
+> (same intent — quick access to high-distraction apps — but as one-tap
+> category toggles instead of a static group).
 
 ### 2.2 Neumorphic Hero Switch 3D (Q5 = A)
 **File:** `ui/MainScreen.kt` (`HeroToggle` only — NOT the onboarding

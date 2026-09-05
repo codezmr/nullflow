@@ -45,7 +45,52 @@ class PackageManagerRepo(private val context: Context) {
         "org.thunderbird",
         "com.slack",
         "net.devinvinci.openholo",
-        "com.zhiliaoapp.musically"
+        "com.zhiliaoapp.musically",
+        // Media / streaming (for the "Media Binge" preset)
+        "com.google.android.youtube",
+        "com.netflix.mediaclient",
+        "in.hotstar"
+    )
+
+    /**
+     * One-tap preset categories for the Focus Matrix. Each maps a friendly
+     * label to the package names it toggles. Only apps that are actually
+     * installed are affected when a chip is tapped.
+     */
+    data class Preset(val label: String, val emoji: String, val packages: List<String>)
+
+    val presets: List<Preset> = listOf(
+        Preset(
+            label = "Social Noise",
+            emoji = "💬",
+            packages = listOf(
+                "com.instagram.android",
+                "com.twitter.android",
+                "com.tiktok.android",
+                "com.facebook.katana",
+                "com.facebook.orca",
+                "com.snapchat.android"
+            )
+        ),
+        Preset(
+            label = "Media Binge",
+            emoji = "🎬",
+            packages = listOf(
+                "com.google.android.youtube",
+                "app.morphe.android.youtube",
+                "com.netflix.mediaclient",
+                "in.hotstar"
+            )
+        ),
+        Preset(
+            label = "Chat Drops",
+            emoji = "💬",
+            packages = listOf(
+                "com.whatsapp",
+                "com.telegram.org",
+                "com.discord"
+            )
+        )
     )
 
     private val cache = mutableListOf<InstalledApp>()
