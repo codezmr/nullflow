@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Pings Deflected" HUD — custom RemoteViews layout for the persistent VPN
+  notification.
+
+  OEM-SAFETY RULES (heavily skinned OSes reflow layouts aggressively):
+   - LinearLayout only (NO ConstraintLayout — OEMs mangle it in RemoteViews).
+   - Fixed heights on the container (not wrap_content on the root).
+   - singleLine + ellipsize on every TextView (prevents clipping/overflow).
+   - No margins that depend on system insets.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="#FF0A0C10"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
+    android:gravity="center_vertical">
+
+    <!-- Shield icon -->
+    <ImageView
+        android:id="@+id/iv_shield"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:src="@drawable/ic_shield_hud"
+        android:importantForAccessibility="no"
+        android:contentDescription="@null" />
+
+    <!-- Text column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="8dp">
+
+        <!-- Title -->
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/vpn_service_label"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- Timer + Pings Deflected (single line, cyan accent) -->
+        <TextView
+            android:id="@+id/tv_timer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="00:00"
+            android:textColor="#FFA0A0A0"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/tv_pings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:text="0 Pings Deflected"
+            android:textColor="#FF00E5FF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- End Session button -->
+    <TextView
+        android:id="@+id/btn_end_session"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="End"
+        android:textColor="#FF0A0C10"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:background="#FF00E5FF"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp" />
+
+</LinearLayout>

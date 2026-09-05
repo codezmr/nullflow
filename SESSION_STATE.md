@@ -15,7 +15,45 @@
 
 ---
 
-## ✅ Current Status: BUILT — Focus Matrix v2 (no presets, home-screen icons, bug fixes)
+## ✅ Current Status: BUILT — "Pings Deflected" HUD + Packet Counter
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### What changed (this round — approved by Zamir, Option A)
+1. **Packet interceptor** (`FocusVpnService.kt`): new `deflectedPings`
+   (`AtomicInteger`) + `startPacketReader(fd)` — a dedicated IO coroutine reads
+   the tunnel's `FileInputStream` in a `while(shouldRun)` loop (32 KB buffer).
+   Every successful read = one deflected attempt → increment counter. Payload is
+   NEVER inspected/logged/stored (strict zero-data privacy). Reader runs on its
+   own `readerScope` so hot-swaps restart it without killing the ticker.
+   Reset to 0 on each fresh session; cancelled on teardown + onDestroy.
+2. **Custom "Pings Deflected" HUD** (`res/layout/notification_focus_hud.xml`):
+   OEM-safe `LinearLayout` (no ConstraintLayout), fixed padding, `singleLine` +
+   `ellipsize` on all TextViews. Dark `#0A0C10` bg, shield icon, title, timer
+   (`tv_timer`), cyan `tv_pings` ("X Pings Deflected"), cyan "End" button
+   (`btn_end_session`). New `ic_shield_hud.xml` (filled shield + check).
+3. **HUD wired to service** (`FocusVpnService.kt`): `buildNotification()` now
+   builds `RemoteViews`, sets `tv_timer` + `tv_pings`, binds `btn_end_session`
+   → stop PendingIntent, body → MainActivity. Uses `setCustomContentView` +
+   `setCustomBigContentView` (with plain-text fallback for OEMs that ignore
+   RemoteViews). The existing 1s ticker re-notifies every second → live ping
+   count.
+4. **Zero-warning cleanup** (`MainScreen.kt`): replaced the two `effectiveProfile!!`
+   non-null assertions with a safe local `val profile = effectiveProfile` inside
+   the `if` block. Both compiler warnings eliminated.
+
+### ⚠️ Still to verify on device (Motorola Edge 40 / Android 15)
+- Notification shows the custom HUD (shield + timer + cyan "X Pings Deflected"
+  + "End" button) — NOT the default text layout.
+- Ping count increments in real time when a blocked app tries to connect.
+- "End" button stops the shield (tile + panel + notification all OFF).
+- HUD doesn't clip on the skinned OS (singleLine + ellipsize should prevent it).
+- Home screen: no `!!` warnings; icon row still renders.
+
+---
+
+## ✅ Previous: Focus Matrix v2 (no presets, home-screen icons, bug fixes)
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.

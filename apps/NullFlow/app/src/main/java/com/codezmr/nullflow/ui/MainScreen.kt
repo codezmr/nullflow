@@ -196,15 +196,16 @@ fun MainScreen(
 
             // Active profile name + edit
             if (effectiveProfile != null) {
+                val profile = effectiveProfile
                 Spacer(Modifier.height(14.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.clickable {
-                        onOpenPicker(effectiveProfile!!.id)
+                        onOpenPicker(profile.id)
                     }
                 ) {
                     Text(
-                        text = effectiveProfile!!.name,
+                        text = profile.name,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
                     )

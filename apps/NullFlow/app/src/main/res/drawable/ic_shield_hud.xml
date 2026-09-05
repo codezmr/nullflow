@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Pings Deflected" HUD shield icon — a filled shield with a check,
+  echoing the NullFlow brand. Used as the small icon in the custom
+  RemoteViews notification. Tinted by the system (white on dark HUD).
+  24dp standard icon canvas.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+
+    <!-- Shield body (filled) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2 L4,5.5 L4,11 C4,16.5 7.5,20.5 12,22 C16.5,20.5 20,16.5 20,11 L20,5.5 Z" />
+
+    <!-- Check mark (cut out via background color) -->
+    <path
+        android:fillColor="#FF0A0C10"
+        android:strokeColor="#FF0A0C10"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8.5,12 L11,14.5 L15.5,9.5" />
+</vector>

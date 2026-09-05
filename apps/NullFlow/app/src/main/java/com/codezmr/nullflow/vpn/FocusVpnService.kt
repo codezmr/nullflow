@@ -10,11 +10,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
-import android.util.Log
+import android.widget.RemoteViews
 import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.MainActivity
 import com.codezmr.nullflow.R
 import com.codezmr.nullflow.data.FocusDatabase
+import java.io.FileInputStream
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -92,6 +94,21 @@ class FocusVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
+     * Live count of deflected connection attempts ("pings"). Incremented by the
+     * packet-reader loop every time a blocked app writes to the tunnel. Thread-
+     * safe (the reader runs on IO, the ticker reads it on the main/IO loop).
+     * Reset to 0 on every fresh session start.
+     */
+    private val deflectedPings = AtomicInteger(0)
+
+    /**
+     * Dedicated scope for the packet-reader loop. Kept SEPARATE from
+     * serviceScope so a hot-swap (refreshRules) can restart the reader against
+     * the new tunnel fd without cancelling the notification ticker.
+     */
+    private var readerScope: CoroutineScope? = null
+
+    /**
      * Instance-level "should the shield be alive" flag. Unlike the static
      * isShieldRunning (which survives across the process), this is checked by
      * the timer loop so a STOP intent immediately halts notification updates
@@ -120,8 +137,10 @@ class FocusVpnService : VpnService() {
         AppLog.d("teardown: stopping shield (shouldRun=$shouldRun, fd=${interfaceFd != null})")
         shouldRun = false
         isShieldRunning = false
-        // 1) Stop the timer loop.
+        // 1) Stop the timer loop + packet reader.
         serviceScope.cancel()
+        readerScope?.cancel()
+        readerScope = null
         // 2) Close the tunnel.
         try {
             interfaceFd?.close()
@@ -264,6 +283,8 @@ class FocusVpnService : VpnService() {
         interfaceFd = fd
         shouldRun = true
         isShieldRunning = true
+        deflectedPings.set(0) // fresh session → reset the HUD counter
+        startPacketReader(fd)
         startTimerUpdates()
         AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
     }
@@ -294,6 +315,52 @@ class FocusVpnService : VpnService() {
         } catch (e: Exception) {
             AppLog.e("VPN establish() FAILED", e)
             null
+        }
+    }
+
+    /**
+     * Launch the packet-reader loop for a given tunnel fd.
+     *
+     * The blackhole tunnel drops packets silently — but the OS still hands us
+     * the byte stream on the interface fd. By actively READING that stream we
+     * can count every connection attempt a blocked app makes ("pings deflected")
+     * and then discard the payload (strict zero-data privacy: we never inspect,
+     * log, or store the bytes).
+     *
+     * Runs on a dedicated IO scope so a hot-swap can restart it against the new
+     * fd without touching the notification ticker.
+     */
+    private fun startPacketReader(fd: ParcelFileDescriptor) {
+        // Cancel any previous reader (hot-swap case).
+        readerScope?.cancel()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        readerScope = scope
+        scope.launch {
+            val input = FileInputStream(fd.fileDescriptor)
+            val buffer = ByteArray(32_767) // 32 KB — typical max UDP/TCP segment
+            AppLog.d("packet reader started")
+            try {
+                while (shouldRun) {
+                    val read = input.read(buffer)
+                    if (read == -1) {
+                        // EOF — tunnel closed (teardown or revoke). Exit cleanly.
+                        AppLog.d("packet reader: EOF (tunnel closed) — exiting")
+                        break
+                    }
+                    if (read > 0) {
+                        // Each successful read = at least one deflected attempt.
+                        deflectedPings.incrementAndGet()
+                        // Payload is intentionally NOT inspected or logged.
+                    }
+                    // read == 0 is rare on a FileInputStream; just loop.
+                }
+            } catch (e: Exception) {
+                // fd closed underneath us (teardown) — expected, not an error.
+                AppLog.d("packet reader stopped: ${e.message}")
+            } finally {
+                try { input.close() } catch (_: Exception) {}
+                AppLog.d("packet reader loop exited (deflected=${deflectedPings.get()})")
+            }
         }
     }
 
@@ -389,6 +456,8 @@ class FocusVpnService : VpnService() {
         val mins = elapsed / 60_000
         val secs = (elapsed / 1000) % 60
         val timer = String.format("%02d:%02d", mins, secs)
+        val pings = deflectedPings.get()
+        val pingsText = "$pings Ping${if (pings == 1) "" else "s"} Deflected"
 
         val contentIntent = PendingIntent.getActivity(
             this, 0,
@@ -404,17 +473,29 @@ class FocusVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // ---- Custom "Pings Deflected" HUD (RemoteViews) ----
+        val views = RemoteViews(packageName, R.layout.notification_focus_hud)
+        views.setTextViewText(R.id.tv_timer, timer)
+        views.setTextViewText(R.id.tv_pings, pingsText)
+        // Tapping the HUD body opens the app.
+        views.setOnClickPendingIntent(R.id.tv_title, contentIntent)
+        views.setOnClickPendingIntent(R.id.tv_timer, contentIntent)
+        views.setOnClickPendingIntent(R.id.tv_pings, contentIntent)
+        // The "End" button stops the shield.
+        views.setOnClickPendingIntent(R.id.btn_end_session, stopIntent)
+
         val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_shield_hud)
             .setContentTitle(getString(R.string.vpn_service_label))
-            .setContentText("$timer · ${getString(R.string.vpn_service_text)}")
+            .setContentText(pingsText) // fallback text for OEMs that ignore RemoteViews
             .setContentIntent(contentIntent)
+            .setCustomContentView(views)
+            .setCustomBigContentView(views)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(0, "End session", stopIntent)
             .build()
-        AppLog.d("buildNotification: title='${getString(R.string.vpn_service_label)}' text='$timer · ${getString(R.string.vpn_service_text)}' ongoing=true")
+        AppLog.d("buildNotification: HUD timer='$timer' pings='$pingsText' ongoing=true")
         return notification
     }
 
@@ -442,6 +523,8 @@ class FocusVpnService : VpnService() {
         shouldRun = false
         isShieldRunning = false
         serviceScope.cancel()
+        readerScope?.cancel()
+        readerScope = null
         try {
             interfaceFd?.close()
             AppLog.d("  tunnel fd closed")
