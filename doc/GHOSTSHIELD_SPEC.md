@@ -1,9 +1,14 @@
 # GhostShield — Quick Settings Tile & Native Focus Panel (Feature Spec)
 
-> **Status:** DRAFT — pending Zamir's answers to the open questions in
-> `doc/QUESTIONS_GHOSTSHIELD.md` before development starts.
+> **Status:** IMPLEMENTED ✅ — the tile + panel are built and shipping. The open
+> questions in §5 were resolved during development (see inline notes +
+> `doc/POLISH_SPEC.md` §4 for post-polish additions).
 > **Package:** `com.codezmr.nullflow` · **Depends on:** existing `FocusVpnService`
 > (blackhole engine) + Room DB (`FocusProfile` / `BlockedApp` / `FocusSession`).
+>
+> **Post-polish addition:** onboarding now offers a **1-tap native pin** of this
+> tile via `StatusBarManager.requestAddTileService` (Android 13+), with a manual
+> drag-and-drop fallback card for API 30-32. See `doc/POLISH_SPEC.md` §4.4.
 
 ---
 

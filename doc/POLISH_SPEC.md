@@ -3,6 +3,15 @@
 > **Status:** APPROVED — all cross-questions answered "Option A / defaults".
 > **Package:** `com.codezmr.nullflow`
 > **Companion decisions:** see inline notes; all Q1–Q6 = Option A.
+>
+> **⚠️ SUPERSEDED ITEMS (see §4 "Post-Polish Additions"):**
+> - §2.1 "One-Tap Preset Chips" — **REMOVED**. Users build their own modes by
+>   picking individual apps (no opaque categories). `PackageManagerRepo.presets`
+>   deleted.
+> - §2.3 "Checkbox Accent" — **N/A** (checkboxes were replaced by Tactile App
+>   Cards in §2.1b).
+> - §1.2 "Frozen Notification Timer" — **UPGRADED** to a full custom
+>   `RemoteViews` HUD with a live "Pings Deflected" counter (see §4.1).
 
 ---
 
@@ -54,18 +63,14 @@ toggle — it must also end the Room session + deactivate the profile.
 ### 2.1 App Picker → "The Focus Matrix" (Q4 upgraded — NO checkboxes)
 **File:** `ui/AppPickerSheet.kt` (full overhaul)
 Replaces the standard Material checkboxes with a high-end, futuristic
-"Focus Matrix". Three pillars:
+"Focus Matrix". Two pillars (presets removed — see §4.2):
 
-**(a) Sticky search + One-Tap Preset Chips (top)**
+**(a) Sticky search (top)**
 - **Sticky search:** `OutlinedTextField`, dark glass (`#141820` surface,
   `#00E5FF` cursor/focus border). Filters the ENTIRE unified list by label
   (case-insensitive).
-- **Preset chips (`LazyRow`):** one-tap category toggles. Tapping a chip
-  blocks ALL its apps if any are unblocked, else unblocks ALL:
-  - 💬 **Social Noise** → Instagram, X/Twitter, TikTok, Facebook
-  - 🎬 **Media Binge** → YouTube, Netflix, Hotstar
-  - 💬 **Chat Drops** → WhatsApp, Telegram, Discord
-  - (Only apps actually installed are affected.)
+- ~~**Preset chips**~~ — **REMOVED** (users build their own modes by picking
+  individual apps; no opaque categories). See §4.2.
 
 **(b) Tactile App Card (replaces the checkbox)**
 - **Unselected:** dark charcoal `#12151C`, muted grey outline `#222733`,
@@ -76,8 +81,10 @@ Replaces the standard Material checkboxes with a high-end, futuristic
 - **Micro-spring:** tap scales to 0.96× then springs back
   (`spring(dampingRatio = MediumBouncy)`). Heavy thud haptic on tap
   (`VibrationEffect.createOneShot(40, DEFAULT_AMPLITUDE)`).
-- Icons rendered via built-in `BitmapPainter` (we already load `Bitmap` in
-  `PackageManagerRepo`) — **NOT** Coil/Accompanist (not available offline).
+- Icons rendered via `rememberAppIconPainter` (async, in-memory cached,
+  `BitmapPainter`) — the SAME loader the QS tile panel uses. **NOT**
+  Coil/Accompanist (not available offline). Replaced the deprecated
+  `Image(bitmap = …)` overload.
 
 **(c) Layout**
 - `LazyColumn` with `verticalArrangement = spacedBy(10.dp)`.
@@ -117,14 +124,93 @@ Replaces the standard Material checkboxes with a high-end, futuristic
 
 ---
 
+## 4. Post-Polish Additions (implemented after the original Q1–Q6)
+
+### 4.1 "Pings Deflected" Notification HUD + Packet Counter
+**Files:** `vpn/FocusVpnService.kt`, `res/layout/notification_focus_hud.xml`,
+`res/drawable/ic_shield_hud.xml`
+
+The blackhole tunnel drops packets silently, but the OS still hands us the byte
+stream on the interface fd. By actively READING that stream we count every
+connection attempt a blocked app makes ("pings deflected") and discard the
+payload (strict zero-data privacy — never inspected/logged/stored).
+
+- **Counter:** `deflectedPings` (`AtomicInteger`), reset to 0 per session.
+- **Reader:** `startPacketReader(fd)` — dedicated IO coroutine reads the tunnel
+  `FileInputStream` in a `while(shouldRun)` loop (32 KB buffer). Each successful
+  read = one deflected attempt → increment. Runs on its own `readerScope` so
+  hot-swaps restart it without killing the ticker. Cancelled on teardown +
+  onDestroy.
+- **HUD layout:** OEM-safe `LinearLayout` (no ConstraintLayout), fixed padding,
+  `singleLine` + `ellipsize` on all TextViews. Dark `#0A0C10` bg, shield icon,
+  title, timer (`tv_timer`), cyan `tv_pings` ("X Pings Deflected"), cyan "End"
+  button (`btn_end_session`).
+- **Wiring:** `buildNotification()` builds `RemoteViews`, sets `tv_timer` +
+  `tv_pings`, binds `btn_end_session` → stop PendingIntent, body → MainActivity.
+  Uses `setCustomContentView` + `setCustomBigContentView` (plain-text fallback
+  for OEMs that ignore RemoteViews). The 1s ticker re-notifies every second →
+  live ping count.
+
+> **Caveat:** the reader counts I/O *reads*, not individual packets (a single
+> `read()` can return multiple packets). This is the privacy-correct tradeoff —
+> precise per-packet counting would require parsing IP headers (inspecting
+> payloads), which violates zero-data privacy.
+
+### 4.2 Dropped Predefined Presets
+**File:** `ui/AppPickerSheet.kt`, `data/PackageManagerRepo.kt`
+- Removed the "ONE-TAP PRESETS" section, `PresetChip` composable, and
+  `togglePreset()`. Deleted `PackageManagerRepo.presets` + `Preset` data class.
+- Rationale: users don't trust opaque categories (they can't see what's in
+  each). Users now build their own modes by picking individual apps. The
+  home-screen + tile-panel icon rows make the blocked set fully transparent.
+
+### 4.3 Home-Screen Blocked-App Icon Row
+**File:** `ui/MainScreen.kt`
+- Beneath the active profile name, a scrollable `LazyRow` of the blocked apps'
+  icons (24dp circles, 8dp spacing) + right-edge gradient fade — mirrors the QS
+  tile panel so the user sees exactly what's shielded. New `BlockedAppIconRow`
+  composable.
+
+### 4.4 1-Tap Quick Settings Tile Pinning (Onboarding)
+**Files:** `MainActivity.kt`, `ui/OnboardingScreen.kt`
+- **`MainActivity.requestAddQsTile(onResult)`:** gated behind
+  `Build.VERSION.SDK_INT >= TIRAMISU` (33). Uses
+  `StatusBarManager.requestAddTileService(ComponentName, "GhostShield", Icon,
+  mainExecutor, Consumer<Int>)`. Callback result code `0` = added, non-zero =
+  dismissed. Dependency-free main-thread `Executor` (Handler on main looper).
+  Pre-33 → reports `false`.
+- **`OnboardingScreen.QsTilePinSection`:** injected ABOVE the gatekeeper button.
+  Header: "Highly Recommended for Seamless Use".
+  - **API 33+:** electric-cyan (`#00E5FF`) outlined button
+    "[ ⚡ Pin to Quick Settings ]". On tap → haptic tick + `requestAddQsTile`.
+    On success → flips to dimmed "✓ Added to Quick Settings" + haptic engage.
+  - **API 30-32 fallback:** muted glassmorphic card with manual drag-and-drop
+    instructions.
+  - **Optional** — never blocks onboarding.
+
+### 4.5 Zero-Warning Cleanup
+**File:** `ui/MainScreen.kt`
+- Replaced the two `effectiveProfile!!` non-null assertions with a safe local
+  `val profile = effectiveProfile` inside the `if` block. Both compiler
+  warnings eliminated.
+
+---
+
 ## Verification
-- `./gradlew assembleDebug` compiles clean.
+- `./gradlew assembleDebug` compiles clean (zero warnings on touched files).
 - All Room interactions off the main thread (`Dispatchers.IO`).
 - No UI leaks when the tile panel is dismissed.
 - Device checks:
-  - Notification timer ticks every second.
-  - "End session" → tile AND panel both show OFF (no desync).
+  - Notification shows the custom HUD (shield + timer + cyan "X Pings
+    Deflected" + "End" button) — NOT the default text layout.
+  - Ping count increments in real time when a blocked app tries to connect.
+  - "End session" (notification button OR tile OR app toggle) → tile AND panel
+    both show OFF (no desync).
   - Tile tap before onboarding → forces Welcome screen.
-  - App picker: search filters all; Suggested cluster at top; cyan checkboxes.
+  - App picker: search filters all; NO preset chips; tactile cards + icons
+    render (not grey circles); header shows "N Shielded" (not a raw list).
   - Hero toggle has 3D extruded look.
   - Tile panel shows app-icon rows per mode with right-edge fade.
+  - Home screen shows blocked-app icon row under the profile name + fades right.
+  - Onboarding (API 33+): cyan "Pin to Quick Settings" button → system dialog →
+    tile appears → button flips to "Added". Haptic tick + engage.
