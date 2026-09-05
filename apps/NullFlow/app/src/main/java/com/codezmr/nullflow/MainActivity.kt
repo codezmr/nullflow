@@ -238,7 +238,7 @@ class MainActivity : ComponentActivity() {
             }
             // Hand off to the default handler so the system crash dialog still shows.
             previous?.uncaughtException(thread, throwable)
-                ?: Thread.UncaughtExceptionHandler { t, e ->
+                ?: Thread.UncaughtExceptionHandler { _, _ ->
                     android.os.Process.killProcess(android.os.Process.myPid())
                     System.exit(10)
                 }.uncaughtException(thread, throwable)
