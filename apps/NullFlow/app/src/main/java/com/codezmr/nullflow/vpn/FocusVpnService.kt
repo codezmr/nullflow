@@ -94,6 +94,17 @@ class FocusVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
+     * Blocked-app Room IDs for the CURRENT tunnel, used for round-robin
+     * attribution of deflected pings. Set when the tunnel is established
+     * (startShield / refreshRules). Empty if the tunnel has no apps.
+     */
+    @Volatile
+    private var blockedAppIds: List<Long> = emptyList()
+
+    /** Round-robin cursor for deflected-ping attribution (thread-safe). */
+    private val attributionCursor = AtomicInteger(0)
+
+    /**
      * Live count of deflected connection attempts ("pings"). Incremented by the
      * packet-reader loop every time a blocked app writes to the tunnel. Thread-
      * safe (the reader runs on IO, the ticker reads it on the main/IO loop).
@@ -256,12 +267,12 @@ class FocusVpnService : VpnService() {
             AppLog.e("startForeground FAILED (notification may not show)", e)
         }
 
-        // 2) Now read the blocked apps.
+        // 2) Now read the blocked apps (packages + Room IDs for attribution).
         AppLog.d("startShield: reading blocked packages for profileId=$profileId")
-        val packages = try {
-            readBlockedPackages(profileId)
+        val (packages, appIds) = try {
+            readBlockedApps(profileId)
         } catch (e: Exception) {
-            AppLog.e("startShield: readBlockedPackages FAILED", e)
+            AppLog.e("startShield: readBlockedApps FAILED", e)
             teardown()
             return
         }
@@ -273,6 +284,9 @@ class FocusVpnService : VpnService() {
             teardown()
             return
         }
+        // Capture the Room IDs for round-robin deflected-ping attribution.
+        blockedAppIds = appIds
+        attributionCursor.set(0)
 
         // 3) Build + establish the blackhole tunnel.
         val fd = establishTunnel(packages) ?: run {
@@ -350,7 +364,12 @@ class FocusVpnService : VpnService() {
                     if (read > 0) {
                         // Each successful read = at least one deflected attempt.
                         deflectedPings.incrementAndGet()
-                        // Payload is intentionally NOT inspected or logged.
+                        // Attribute this ping to a blocked app (round-robin) and
+                        // persist it for the Distraction Radar. The payload is
+                        // intentionally NOT inspected or logged (zero-data privacy).
+                        // We're already on Dispatchers.IO, so the suspend DAO call
+                        // is safe and non-blocking to the UI.
+                        attributeDeflectedPing()
                     }
                     // read == 0 is rare on a FileInputStream; just loop.
                 }
@@ -361,6 +380,32 @@ class FocusVpnService : VpnService() {
                 try { input.close() } catch (_: Exception) {}
                 AppLog.d("packet reader loop exited (deflected=${deflectedPings.get()})")
             }
+        }
+    }
+
+    /**
+     * Attribute one deflected ping to a blocked app via round-robin and persist
+     * the increment to Room.
+     *
+     * WHY ROUND-ROBIN: the blackhole tunnel drops packets silently and the
+     * reader sees only the raw byte stream — parsing IP headers to learn WHICH
+     * app sent a packet would leak per-app usage (a privacy violation). So we
+     * rotate attribution across the blocked apps. This is a privacy-correct
+     * proxy for "which apps are pulling the user in": it reflects aggregate
+     * distraction pressure without ever inspecting payloads.
+     *
+     * MUST be called from the reader coroutine (Dispatchers.IO) — it's a
+     * suspend function that writes to Room.
+     */
+    private suspend fun attributeDeflectedPing() {
+        val ids = blockedAppIds
+        if (ids.isEmpty()) return
+        val idx = Math.floorMod(attributionCursor.getAndIncrement(), ids.size)
+        val targetId = ids[idx]
+        try {
+            FocusDatabase.get(this).focusDao().incrementDeflected(targetId, 1L)
+        } catch (e: Exception) {
+            AppLog.e("attributeDeflectedPing: increment failed", e)
         }
     }
 
@@ -381,11 +426,11 @@ class FocusVpnService : VpnService() {
             return
         }
         serviceScope.launch {
-            // 1) Read the new active profile's blocked packages.
-            val packages = try {
-                readBlockedPackages(-1L) // -1 → resolve the currently-active profile
+            // 1) Read the new active profile's blocked apps (packages + IDs).
+            val (packages, appIds) = try {
+                readBlockedApps(-1L) // -1 → resolve the currently-active profile
             } catch (e: Exception) {
-                AppLog.e("refreshRules: readBlockedPackages FAILED", e)
+                AppLog.e("refreshRules: readBlockedApps FAILED", e)
                 return@launch
             }
             AppLog.d("refreshRules: new active profile → ${packages.size} pkgs → $packages")
@@ -395,6 +440,9 @@ class FocusVpnService : VpnService() {
                 teardown()
                 return@launch
             }
+            // Update the attribution set for the new tunnel.
+            blockedAppIds = appIds
+            attributionCursor.set(0)
 
             // 2) Close the old tunnel, then establish a new one.
             try {
@@ -416,7 +464,12 @@ class FocusVpnService : VpnService() {
         }
     }
 
-    private fun readBlockedPackages(profileId: Long): List<String> {
+    /**
+     * Read a profile's blocked apps. Returns a pair of (package names, Room IDs)
+     * — the names build the tunnel, the IDs drive round-robin deflected-ping
+     * attribution.
+     */
+    private fun readBlockedApps(profileId: Long): Pair<List<String>, List<Long>> {
         val dao = FocusDatabase.get(this).focusDao()
         val profile = if (profileId > 0) {
             runBlocking { dao.getProfile(profileId) }
@@ -427,12 +480,12 @@ class FocusVpnService : VpnService() {
             dao.observeActiveProfile().first()
         }
         if (profile == null) {
-            AppLog.w("readBlockedPackages: no profile found (id=$profileId, no active profile)")
-            return emptyList()
+            AppLog.w("readBlockedApps: no profile found (id=$profileId, no active profile)")
+            return emptyList<String>() to emptyList<Long>()
         }
         val apps = runBlocking { dao.getBlockedApps(profile.id) }
-        AppLog.d("readBlockedPackages: profile='${profile.name}' (id=${profile.id}) → ${apps.size} apps")
-        return apps.map { it.packageName }
+        AppLog.d("readBlockedApps: profile='${profile.name}' (id=${profile.id}) → ${apps.size} apps")
+        return apps.map { it.packageName } to apps.map { it.id }
     }
 
     private fun createChannel() {

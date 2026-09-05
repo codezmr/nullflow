@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -76,6 +77,14 @@ fun MainScreen(
     val runningSession by dao.observeRunningSession().collectAsState(initial = null)
     val totalMs by dao.observeTotalFocusedMs().collectAsState(initial = 0L)
     val completedCount by dao.observeCompletedCount().collectAsState(initial = 0)
+
+    // ---- Command Center: radar + dossier data ----
+    // Top 6 most-intercepted apps (drives the Distraction Radar).
+    val topIntercepted by dao.observeTopIntercepted(6).collectAsState(initial = emptyList())
+    // Total deflected pings across all apps (drives the shareable dossier).
+    val totalDeflected by dao.observeTotalDeflected().collectAsState(initial = 0L)
+    // Dossier generation state (for the share button's loading feedback).
+    var dossierBusy by remember { mutableStateOf(false) }
 
     // The profile the UI is "pointing at": the active one if set, otherwise the
     // first existing profile. This keeps the profile row, the blocked-app count,
@@ -143,6 +152,31 @@ fun MainScreen(
             AppLog.d("TOGGLE → turning ON for profileId=$profileId ($blockedCount apps)")
             startShield(context, dao, profileId)
             Haptics.engage(context)
+        }
+    }
+
+    // ---- Share the Zero-Leak Dossier (generate 9:16 card → share sheet) ----
+    fun onShareDossier() {
+        if (dossierBusy) return
+        Haptics.tick(context)
+        dossierBusy = true
+        scope.launch {
+            try {
+                val path = DossierGenerator.generateAndSave(
+                    context = context,
+                    totalFocusMs = totalMs,
+                    totalDeflected = totalDeflected,
+                    completedSessions = completedCount
+                )
+                if (path != null) {
+                    DossierShare.share(context, path)
+                    Haptics.engage(context)
+                } else {
+                    Haptics.disengage(context)
+                }
+            } finally {
+                dossierBusy = false
+            }
         }
     }
 
@@ -269,16 +303,144 @@ fun MainScreen(
 
             Spacer(Modifier.weight(1f))
 
-            // ---- Quantified Relief stats ----
-            StatsRow(
-                sessionMs = if (runningSession != null)
-                    (now - runningSession!!.startTime) else 0L,
-                totalMs = totalMs,
-                completedCount = completedCount
-            )
+            if (isActive) {
+                // ---- Active: live session stats ----
+                StatsRow(
+                    sessionMs = if (runningSession != null)
+                        (now - runningSession!!.startTime) else 0L,
+                    totalMs = totalMs,
+                    completedCount = completedCount
+                )
+            } else {
+                // ---- Inactive: the Premium Analytics Command Center ----
+                CommandCenter(
+                    topIntercepted = topIntercepted,
+                    totalDeflected = totalDeflected,
+                    totalMs = totalMs,
+                    completedCount = completedCount,
+                    dossierBusy = dossierBusy,
+                    onShareDossier = { onShareDossier() }
+                )
+            }
 
             Spacer(Modifier.height(40.dp))
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Command Center (inactive state) — radar + shareable dossier
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun CommandCenter(
+    topIntercepted: List<com.codezmr.nullflow.data.BlockedApp>,
+    totalDeflected: Long,
+    totalMs: Long,
+    completedCount: Int,
+    dossierBusy: Boolean,
+    onShareDossier: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "DISTRACTION RADAR",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Drag across a node to inspect",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        // The hexagonal radar (square aspect, ~280dp).
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(280.dp)
+        ) {
+            if (topIntercepted.isEmpty()) {
+                // Empty state: no interceptions yet.
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "No data yet",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Activate the shield to start tracking",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                    )
+                }
+            } else {
+                FocusRadarGraph(
+                    apps = topIntercepted,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // Aggregate stats (compact, under the radar).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            StatCell(value = formatDuration(totalMs), label = "all-time focus")
+            StatCell(value = "$totalDeflected", label = "pings deflected")
+            StatCell(value = "$completedCount", label = "sessions")
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ---- Share the Zero-Leak Dossier ----
+        ShareDossierButton(
+            busy = dossierBusy,
+            onClick = onShareDossier
+        )
+    }
+}
+
+@Composable
+private fun ShareDossierButton(busy: Boolean, onClick: () -> Unit) {
+    val alpha by animateFloatAsState(
+        targetValue = if (busy) 0.6f else 1f,
+        animationSpec = tween(200),
+        label = "shareAlpha"
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF00E5FF), Color(0xFF4F8CFF))
+                )
+            )
+            .clickable(enabled = !busy, onClick = onClick)
+            .padding(horizontal = 28.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = if (busy) "Generating…" else "Share my focus dossier",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF0A0C10).copy(alpha = alpha)
+        )
     }
 }
 

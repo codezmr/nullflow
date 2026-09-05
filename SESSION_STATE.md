@@ -15,7 +15,62 @@
 
 ---
 
-## ✅ Current Status: BUILT — 1-Tap QS Tile Pinning (onboarding) + HUD
+## ✅ Current Status: BUILT — Premium Analytics Command Center + Shareable Dossier
+
+**Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
+`apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
+
+### What changed (this round — approved by Zamir)
+The inactive shield state (Main Screen) is now a **Premium Analytics Command
+Center** with a custom-drawn radar + a 1-tap shareable dossier.
+
+1. **Per-app interception tracking** (data layer):
+   - `BlockedApp.deflectedCount: Long` (new column, DB **v1 → v2**,
+     `fallbackToDestructiveMigration`).
+   - `FocusDao.observeTopIntercepted(limit)` — top-N apps by deflectedCount.
+   - `FocusDao.incrementDeflected(id, delta)` — atomic increment.
+   - `FocusDao.observeTotalDeflected()` — SUM across all apps (for the dossier).
+2. **Round-robin attribution** (`FocusVpnService.kt`): the packet reader now
+   attributes each deflected ping to a blocked app in rotation and persists it
+   to Room. `readBlockedPackages` → `readBlockedApps` (returns packages + Room
+   IDs). `blockedAppIds` + `attributionCursor` (AtomicInteger) track rotation.
+   - **Privacy note:** the tunnel drops packets silently and the reader sees
+     only the raw byte stream — parsing IP headers to learn WHICH app sent a
+     packet would leak per-app usage. Round-robin is the privacy-correct proxy.
+3. **Distraction Radar** (`ui/FocusRadarGraph.kt`, NEW): hexagonal `Canvas`
+   graph. Base web (3 concentric hexagons + spokes, `#1E222B`), data polygon
+   (cyan `#00E5FF` 0.3 alpha fill + glowing stroke), 4dp cyan node circles.
+   Data normalized against the max app (outer edge = 100%). **Tactile
+   scrubbing:** `detectDragGestures` → haptic `TextHandleMove` tick when crossing
+   a node + floating label with the exact count. Animated reveal on draw.
+4. **Shareable Dossier** (`ui/DossierGenerator.kt` + `ui/DossierShare.kt`, NEW):
+   - 9:16 (1080×1920) Compose card: NullFlow brand mark, total focus time,
+     total pings deflected, session count, glassmorphic gradient bg, date.
+   - Captured via off-screen `ComposeView` + `View.drawToBitmap` on
+     `Dispatchers.IO`, saved to `cacheDir/nullflow_dossier.png`.
+   - **ZERO-LEAK:** only aggregate stats + brand — no app/package names.
+   - `DossierShare.share()` → `FileProvider.getUriForFile` + `ACTION_SEND`
+     (`image/png`, `FLAG_GRANT_READ_URI_PERMISSION`).
+5. **FileProvider** (`AndroidManifest.xml` + `res/xml/file_paths.xml`):
+   `<provider>` for `androidx.core.content.FileProvider` (authority
+   `${applicationId}.fileprovider`, `cache-path` = `.`). Prevents
+   `FileUriExposedException` on Android 11+.
+6. **MainScreen wiring**: inactive state now shows `CommandCenter` (radar +
+   aggregate stats + "Share my focus dossier" gradient button) instead of the
+   old `StatsRow`. Active state keeps the live `StatsRow`. `dossierBusy` state
+   drives the button's "Generating…" feedback.
+
+### ⚠️ Still to verify on device (Motorola Edge 40 / Android 15 = API 35)
+- Inactive screen shows the hexagonal radar (empty state if no data yet).
+- After a shield session, the radar shows the top-6 apps as a cyan polygon.
+- Dragging across a node → haptic tick + floating "N deflected" label.
+- "Share my focus dossier" → generates card → share sheet opens with the image.
+- Shared image renders correctly (9:16, brand + stats, no app names).
+- (HUD + packet counter + QS pinning from previous commits still working.)
+
+---
+
+## ✅ Previous: 1-Tap QS Tile Pinning (onboarding) + HUD
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.

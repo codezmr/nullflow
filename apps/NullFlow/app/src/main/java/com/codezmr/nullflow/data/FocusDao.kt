@@ -77,6 +77,30 @@ interface FocusDao {
     @Query("DELETE FROM blocked_apps WHERE profileId = :profileId")
     suspend fun clearBlockedApps(profileId: Long)
 
+    /**
+     * Top [limit] most-intercepted apps (by cumulative deflected count), for
+     * the Distraction Radar. Apps with 0 interceptions are excluded (a radar
+     * of all-zeros is meaningless). Ordered by deflectedCount DESC.
+     */
+    @Query(
+        "SELECT * FROM blocked_apps " +
+            "WHERE deflectedCount > 0 " +
+            "ORDER BY deflectedCount DESC, appName COLLATE NOCASE ASC " +
+            "LIMIT :limit"
+    )
+    fun observeTopIntercepted(limit: Int): Flow<List<BlockedApp>>
+
+    /**
+     * Atomically increment a blocked app's deflected count by [delta]. Called
+     * by the VPN packet reader (round-robin attribution).
+     */
+    @Query("UPDATE blocked_apps SET deflectedCount = deflectedCount + :delta WHERE id = :id")
+    suspend fun incrementDeflected(id: Long, delta: Long)
+
+    /** Total deflected pings across ALL blocked apps (for the shareable dossier). */
+    @Query("SELECT COALESCE(SUM(deflectedCount), 0) FROM blocked_apps")
+    fun observeTotalDeflected(): Flow<Long>
+
     // ---------- FocusSession ----------
 
     @Insert

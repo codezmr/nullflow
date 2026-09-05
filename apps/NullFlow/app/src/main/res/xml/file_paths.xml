@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider paths for the shareable dossier.
+  The dossier PNG is written to the app's cacheDir, so we expose cache-path.
+  Without this <provider> + file_paths.xml, sharing the image URI on Android 11+
+  crashes with FileUriExposedException.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path
+        name="dossier"
+        path="." />
+</paths>
