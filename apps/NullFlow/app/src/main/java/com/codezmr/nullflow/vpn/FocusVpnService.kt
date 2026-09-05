@@ -68,10 +68,62 @@ class FocusVpnService : VpnService() {
     private var sessionStartedAt: Long = 0L
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * Instance-level "should the shield be alive" flag. Unlike the static
+     * isShieldRunning (which survives across the process), this is checked by
+     * the timer loop so a STOP intent immediately halts notification updates
+     * even if the service process lingers for a moment.
+     */
+    @Volatile
+    private var shouldRun: Boolean = false
+
     override fun onCreate() {
         super.onCreate()
         AppLog.d("FocusVpnService.onCreate")
         createChannel()
+    }
+
+    /**
+     * Deterministic teardown: stops the timer, closes the tunnel, removes the
+     * foreground notification + VPN icon, and stops the service. Safe to call
+     * multiple times (idempotent). This is the ONLY place we tear down, so the
+     * notification can't linger no matter how many STOP intents arrive.
+     */
+    private fun teardown() {
+        if (!shouldRun && interfaceFd == null) {
+            AppLog.d("teardown: already stopped, no-op")
+            return
+        }
+        AppLog.d("teardown: stopping shield (shouldRun=$shouldRun, fd=${interfaceFd != null})")
+        shouldRun = false
+        isShieldRunning = false
+        // 1) Stop the timer loop.
+        serviceScope.cancel()
+        // 2) Close the tunnel.
+        try {
+            interfaceFd?.close()
+            AppLog.d("teardown: tunnel fd closed")
+        } catch (e: Exception) {
+            AppLog.e("teardown: closing fd failed", e)
+        }
+        interfaceFd = null
+        // 3) Remove foreground notification + VPN status-bar icon.
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            AppLog.d("teardown: stopForeground(REMOVE) called")
+        } catch (e: Exception) {
+            AppLog.e("teardown: stopForeground failed", e)
+        }
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(NOTIF_ID)
+            AppLog.d("teardown: notification $NOTIF_ID cancelled")
+        } catch (e: Exception) {
+            AppLog.e("teardown: cancel notification failed", e)
+        }
+        // 4) Stop the service.
+        stopSelf()
+        AppLog.d("teardown: COMPLETE — service stopping")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -79,23 +131,16 @@ class FocusVpnService : VpnService() {
         AppLog.d("FocusVpnService.onStartCommand action=$action startId=$startId intent=${intent != null}")
         when (action) {
             ACTION_STOP -> {
-                AppLog.d("ACTION_STOP received → stopping service (startId=$startId)")
-                // Drop the foreground notification + VPN icon immediately, then
-                // tear the service down. (onDestroy also does this as a safety
-                // net, but doing it here makes the UI update instantly.)
-                try {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                } catch (_: Exception) {
-                }
-                stopSelf()
+                AppLog.d("ACTION_STOP received → teardown (startId=$startId)")
+                teardown()
                 return START_NOT_STICKY
             }
             // A NULL intent means the system is re-delivering after the process
             // died (sticky restart). We must NOT re-establish the tunnel in that
             // case — that's what kept bringing the VPN icon back after OFF.
             null -> {
-                AppLog.w("onStartCommand with NULL intent (system re-delivery) — NOT re-establishing shield")
-                stopSelf()
+                AppLog.w("onStartCommand with NULL intent (system re-delivery) — teardown, NOT re-establishing")
+                teardown()
                 return START_NOT_STICKY
             }
             else -> startShield(intent.getLongExtra(EXTRA_PROFILE_ID, -1L))
@@ -130,7 +175,7 @@ class FocusVpnService : VpnService() {
             readBlockedPackages(profileId)
         } catch (e: Exception) {
             AppLog.e("startShield: readBlockedPackages FAILED", e)
-            stopSelf()
+            teardown()
             return
         }
         AppLog.d("startShield: profileId=$profileId blocked=${packages.size} pkgs → $packages")
@@ -138,7 +183,7 @@ class FocusVpnService : VpnService() {
         if (packages.isEmpty()) {
             AppLog.w("No blocked apps for this profile — nothing to shield. Stopping. " +
                 "(UI should tell the user to add apps first.)")
-            stopSelf()
+            teardown()
             return
         }
 
@@ -162,11 +207,12 @@ class FocusVpnService : VpnService() {
             builder.establish()
         } catch (e: Exception) {
             AppLog.e("VPN establish() FAILED", e)
-            stopSelf()
+            teardown()
             return
         }
 
         interfaceFd = fd
+        shouldRun = true
         isShieldRunning = true
         startTimerUpdates()
         AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
@@ -244,9 +290,9 @@ class FocusVpnService : VpnService() {
     /** Refresh the notification timer every 30s while active. */
     private fun startTimerUpdates() {
         serviceScope.launch {
-            while (true) {
+            while (shouldRun) {
                 delay(30_000)
-                if (interfaceFd != null) {
+                if (shouldRun && interfaceFd != null) {
                     try {
                         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                             .notify(NOTIF_ID, buildNotification())
@@ -255,11 +301,16 @@ class FocusVpnService : VpnService() {
                     }
                 }
             }
+            AppLog.d("timer loop exited (shouldRun=$shouldRun)")
         }
     }
 
     override fun onDestroy() {
         AppLog.d("FocusVpnService.onDestroy — Shield OFF, releasing tunnel (fd=${interfaceFd != null}, wasRunning=$isShieldRunning)")
+        // Full deterministic cleanup (idempotent — safe if teardown() already ran).
+        shouldRun = false
+        isShieldRunning = false
+        serviceScope.cancel()
         try {
             interfaceFd?.close()
             AppLog.d("  tunnel fd closed")
@@ -267,8 +318,6 @@ class FocusVpnService : VpnService() {
             AppLog.e("closing VPN fd failed", e)
         }
         interfaceFd = null
-        isShieldRunning = false
-        serviceScope.cancel()
         // CRITICAL: remove the foreground notification + VPN status-bar icon.
         // Without this the "Local Privacy Shield is active" notification and the
         // VPN icon linger after the shield is turned off.
@@ -293,7 +342,7 @@ class FocusVpnService : VpnService() {
 
     /** Called by the system if the VPN is revoked (e.g. user disables it in settings). */
     override fun onRevoke() {
-        AppLog.w("VPN revoked by system (onRevoke) — stopping service")
-        stopSelf()
+        AppLog.w("VPN revoked by system (onRevoke) — teardown")
+        teardown()
     }
 }
