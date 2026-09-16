@@ -16,12 +16,26 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        getByName("debug").also {
+            // Reuse debug key for release (GitHub distribution only)
+        }
+        create("release") {
+            storeFile = file("../local.keystore")
+            storePassword = System.getenv("KEYSTORE_PASS") ?: "android"
+            keyAlias = "nullflow"
+            keyPassword = System.getenv("KEY_PASS") ?: "android"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
