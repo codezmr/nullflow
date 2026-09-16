@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
+import com.codezmr.nullflow.ui.SecondaryButton
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusDatabase
 import com.codezmr.nullflow.data.ProfileWithAppsRow
@@ -284,29 +285,12 @@ fun TileFocusPanel(
 
         Spacer(Modifier.height(16.dp))
 
-        // ---- Action row: open main app to create/edit modes ----
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { onOpenApp() }
-                .padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "+",
-                color = PanelAccent,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = "Create / Edit Modes",
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
+        // ---- Action row: add more apps (opens dashboard) ----
+        SecondaryButton(
+            text = "Add more apps",
+            icon = "+",
+            onClick = onOpenApp
+        )
     }
 }
 

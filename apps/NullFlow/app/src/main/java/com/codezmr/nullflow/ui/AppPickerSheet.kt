@@ -231,29 +231,17 @@ fun AppPickerSheet(
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 24.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(AccentCyan)
-                        .clickable {
-                            Haptics.engage(context)
-                            AppLog.d("AppPicker: DONE tapped — closing sheet (${blockedPackages.size} apps)")
-                            onDismiss()
-                        }
-                        .height(54.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (blockedPackages.size > 0)
-                            "Done · ${blockedPackages.size} app${if (blockedPackages.size == 1) "" else "s"} selected"
-                        else
-                            "Done",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black
-                    )
-                }
+                PrimaryButton(
+                    text = if (blockedPackages.size > 0)
+                        "Done · ${blockedPackages.size} app${if (blockedPackages.size == 1) "" else "s"} selected"
+                    else
+                        "Done",
+                    onClick = {
+                        Haptics.engage(context)
+                        AppLog.d("AppPicker: DONE tapped — closing sheet (${blockedPackages.size} apps)")
+                        onDismiss()
+                    }
+                )
             }
         }
     }
@@ -359,19 +347,11 @@ private fun TactileAppCard(
         }
 
         // Action pill badge (replaces the checkbox)
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(if (isShielded) AccentCyan else BadgeUnselected)
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = if (isShielded) "🔒 SHIELDED" else "+ ADD",
-                color = if (isShielded) Color.Black else MutedText,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        SmallActionButton(
+            text = if (isShielded) "SHIELDED" else "+ ADD",
+            onClick = onToggle,
+            active = isShielded
+        )
     }
 }
 
