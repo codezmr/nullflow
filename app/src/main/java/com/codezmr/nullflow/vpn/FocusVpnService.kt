@@ -329,7 +329,25 @@ class FocusVpnService : VpnService() {
         startPacketReader(fd)
         startInterceptFlusher()
         startTimerUpdates()
+        startAutoStopTimer()
         AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
+    }
+
+    /**
+     * If the user set an auto-stop duration in Settings, schedule a teardown
+     * after that many minutes. No-op if autoStopMinutes == 0 (disabled).
+     */
+    private fun startAutoStopTimer() {
+        val minutes = com.codezmr.nullflow.data.Settings.get(this).autoStopMinutes
+        if (minutes <= 0) return
+        AppLog.d("Auto-stop timer: ${minutes}min")
+        serviceScope.launch {
+            delay(minutes * 60_000L)
+            if (shouldRun) {
+                AppLog.d("Auto-stop: time's up, tearing down")
+                teardown()
+            }
+        }
     }
 
     /**
@@ -393,11 +411,9 @@ class FocusVpnService : VpnService() {
                     if (read > 0) {
                         // Each successful read = at least one deflected attempt.
                         deflectedPings.incrementAndGet()
-                        // Attribute this ping to a blocked app (round-robin) and
-                        // buffer it for the Telemetry Console. The payload is
-                        // intentionally NOT inspected or logged (zero-data privacy).
-                        // Enqueue is lock-free O(1) — the flush coroutine does the
-                        // actual Room write in a batch (see startInterceptFlusher).
+                        if (com.codezmr.nullflow.data.Settings.get(this@FocusVpnService).verboseLogging) {
+                            AppLog.d("packet: ${read} bytes deflected (total=${deflectedPings.get()})")
+                        }
                         bufferDeflectedPing()
                     }
                     // read == 0 is rare on a FileInputStream; just loop.

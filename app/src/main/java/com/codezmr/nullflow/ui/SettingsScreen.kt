@@ -149,6 +149,7 @@ fun SettingsScreen(
                     title = "Auto-start on boot",
                     subtitle = "Resume shield after device restart",
                     checked = settings.autoStartOnBoot,
+                    beta = true,
                     onCheckedChange = {
                         settings.autoStartOnBoot = it
                         refresh()
@@ -160,7 +161,8 @@ fun SettingsScreen(
                 // Auto-stop timer
                 SettingRow(
                     title = "Auto-stop after",
-                    subtitle = if (settings.autoStopMinutes > 0) "${settings.autoStopMinutes} min" else "Off"
+                    subtitle = if (settings.autoStopMinutes > 0) "${settings.autoStopMinutes} min" else "Off",
+                    beta = true
                 ) {
                     val options = listOf(0, 15, 25, 30, 45, 60, 90, 120)
                     val currentIdx = options.indexOf(settings.autoStopMinutes).coerceAtLeast(0)
@@ -176,6 +178,7 @@ fun SettingsScreen(
                     title = "Block only when screen on",
                     subtitle = "Save battery when phone is locked",
                     checked = settings.blockOnlyScreenOn,
+                    beta = true,
                     onCheckedChange = {
                         settings.blockOnlyScreenOn = it
                         refresh()
@@ -190,6 +193,7 @@ fun SettingsScreen(
                     title = "Enable schedule",
                     subtitle = "Auto-activate during set hours",
                     checked = settings.scheduleEnabled,
+                    beta = true,
                     onCheckedChange = {
                         settings.scheduleEnabled = it
                         refresh()
@@ -570,10 +574,29 @@ private fun SettingDivider() {
 }
 
 @Composable
+private fun BetaBadge() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFFFF9500).copy(alpha = 0.15f))
+            .border(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "BETA",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFFF9500)
+        )
+    }
+}
+
+@Composable
 private fun SettingRow(
     title: String,
     subtitle: String,
     danger: Boolean = false,
+    beta: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
@@ -584,12 +607,18 @@ private fun SettingRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (danger) Color(0xFFFF3B30) else SfgText
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (danger) Color(0xFFFF3B30) else SfgText
+                )
+                if (beta) {
+                    Spacer(Modifier.width(6.dp))
+                    BetaBadge()
+                }
+            }
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
@@ -610,6 +639,7 @@ private fun SettingSwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
+    beta: Boolean = false,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -619,12 +649,18 @@ private fun SettingSwitchRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = SfgText
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SfgText
+                )
+                if (beta) {
+                    Spacer(Modifier.width(6.dp))
+                    BetaBadge()
+                }
+            }
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
