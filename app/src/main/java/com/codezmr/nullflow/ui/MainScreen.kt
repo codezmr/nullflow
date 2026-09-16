@@ -91,6 +91,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     var showModeManager by remember { mutableStateOf(false) }
     var showNoAppsWarning by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
 
     // ---- State from Room ----
     val profiles by dao.observeProfiles().collectAsState(initial = emptyList())
@@ -198,7 +199,7 @@ fun MainScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
         ) {
-            // ---- 1. TOP: Screen name + back ----
+            // ---- 1. TOP: Screen name + back + settings ----
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -226,8 +227,23 @@ fun MainScreen(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    modifier = Modifier.weight(1f)
                 )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF12151C))
+                        .border(1.dp, Color(0xFF222733), CircleShape)
+                        .clickable {
+                            AppLog.d("Dashboard: settings opened")
+                            showSettings = true
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("⚙", fontSize = 16.sp, color = Color(0xFFA0A0A0))
+                }
             }
 
             // ---- 2. CENTER: Hero + info ----
@@ -582,6 +598,27 @@ fun MainScreen(
                     GhostButton(
                         text = "Cancel",
                         onClick = { showNoAppsWarning = false }
+                    )
+                }
+            }
+        }
+
+        if (showSettings) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .clickable { showSettings = false }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .clickable(enabled = false) { }
+                ) {
+                    SettingsScreen(
+                        dao = dao,
+                        onBack = { showSettings = false }
                     )
                 }
             }
