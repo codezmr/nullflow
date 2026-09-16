@@ -136,18 +136,33 @@ fun ModeManagerSheet(
             .padding(horizontal = 24.dp)
             .padding(top = 20.dp, bottom = 28.dp)
     ) {
-        // Header
+        // Header: screen name + back
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Focus Modes",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(SheetSurface)
+                        .border(1.dp, SheetBorder, CircleShape)
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("←", fontSize = 14.sp, color = SheetMuted)
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = "MANAGE MODES",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
+                )
+            }
             TextButton(onClick = onDismiss) {
                 Text("Done", color = SheetAccent, fontSize = 14.sp)
             }

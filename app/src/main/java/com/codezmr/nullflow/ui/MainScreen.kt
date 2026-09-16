@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -88,13 +90,16 @@ fun MainScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showModeManager by remember { mutableStateOf(false) }
+    var showNoAppsWarning by remember { mutableStateOf(false) }
 
     // ---- State from Room ----
     val profiles by dao.observeProfiles().collectAsState(initial = emptyList())
+    val profilesWithCount by dao.observeProfilesWithAppCount().collectAsState(initial = emptyList())
     val activeProfile by dao.observeActiveProfile().collectAsState(initial = null)
     val runningSession by dao.observeRunningSession().collectAsState(initial = null)
     val totalMs by dao.observeTotalFocusedMs().collectAsState(initial = 0L)
     val completedCount by dao.observeCompletedCount().collectAsState(initial = 0)
+    val recentSessions by dao.observeRecentSessions(5).collectAsState(initial = emptyList())
 
     // ---- Focus Telemetry Console: live interception data ----
     // Top 5 most-intercepted apps (drives the donut + the threat ledger).
@@ -106,9 +111,6 @@ fun MainScreen(
     // Per-day telemetry for the last 7 days (heatmap).
     val dailyTelemetry by dao.getDailyTelemetry(localMidnight(System.currentTimeMillis()))
         .collectAsState(initial = emptyList())
-
-    // Dossier generation state (for the share button's loading feedback).
-    var dossierBusy by remember { mutableStateOf(false) }
 
     // The profile the UI is "pointing at": the active one if set, otherwise the
     // first existing profile. This keeps the profile row, the blocked-app count,
@@ -164,12 +166,11 @@ fun MainScreen(
             // existing), or a brand-new default only if none exist at all.
             val profileId = effectiveProfile?.id ?: createDefaultProfile(dao)
 
-            // Guard: nothing to shield → don't start the service (it would
-            // immediately stop), and tell the user to add apps first.
+            // Guard: nothing to shield → show a clear message.
             if (blockedCount == 0) {
-                AppLog.w("TOGGLE → blocked, 0 apps in profile $profileId. Opening picker.")
+                AppLog.w("TOGGLE → blocked, 0 apps in profile $profileId. Showing warning.")
                 Haptics.tick(context)
-                onOpenPicker(profileId)
+                showNoAppsWarning = true
                 return
             }
 
@@ -179,180 +180,341 @@ fun MainScreen(
         }
     }
 
-    // ---- Share the Zero-Leak Dossier (generate 9:16 card → share sheet) ----
-    fun onShareDossier() {
-        if (dossierBusy) return
-        Haptics.tick(context)
-        dossierBusy = true
-        scope.launch {
-            try {
-                val path = DossierGenerator.generateAndSave(
-                    context = context,
-                    totalFocusMs = totalMs,
-                    totalDeflected = totalIntercepts.toLong(),
-                    completedSessions = completedCount
-                )
-                if (path != null) {
-                    DossierShare.share(context, path)
-                    Haptics.engage(context)
-                } else {
-                    Haptics.disengage(context)
-                }
-            } finally {
-                dossierBusy = false
-            }
-        }
-    }
+    var showStats by remember { mutableStateOf(false) }
+    val statsExpanded by animateFloatAsState(
+        targetValue = if (showStats) 1f else 0f,
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        label = "statsExpand"
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
     ) {
-        // Root Column: fillMaxSize. The center content gets weight(1f) so it
-        // takes ALL remaining space. The bottom dashboard is anchored with NO
-        // weight, so it is permanently pinned to the bottom edge and can never
-        // be pushed off-screen by the (unconstrained) center content.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
         ) {
-            // ---- 1. TOP: Tactical HUD header (fixed height) ----
-            HudHeader(
-                isShieldActive = isActive
-            )
-
-            // ---- 2. CENTER: Hero Toggle + App Icons (weight(1f) — dynamic) ----
-            // This Column absorbs all remaining vertical space. Its content is
-            // centered vertically so the Hero Toggle stays visually balanced
-            // regardless of how many app icons are shown below it.
-            Column(
+            // ---- 1. TOP: Screen name + back ----
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(top = 16.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // ---- THE HERO TOGGLE ----
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF12151C))
+                        .border(1.dp, Color(0xFF222733), CircleShape)
+                        .clickable {
+                            AppLog.d("Dashboard: back pressed → finishing activity")
+                            (context as? android.app.Activity)?.finish()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("←", fontSize = 16.sp, color = Color(0xFFA0A0A0))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = "DASHBOARD",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+            }
+
+            // ---- 2. CENTER: Hero + info ----
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Hero circle
                 HeroToggle(
                     isActive = isActive,
+                    label = if (isActive) "ON" else "OFF",
                     onClick = { onToggle() }
                 )
 
-                Spacer(Modifier.height(24.dp))
-
-                // Status line
+                // Label below circle
+                Spacer(Modifier.height(14.dp))
                 Text(
-                    text = if (isActive) "Shield active" else "Shield off",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = if (isActive) "Shield on" else "Shield off",
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isActive)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    color = if (isActive) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
 
-                // Active profile name + edit
-                if (effectiveProfile != null) {
+                Spacer(Modifier.height(28.dp))
+
+                // Active mode info (when ON)
+                if (isActive && effectiveProfile != null) {
                     val profile = effectiveProfile
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF12151C))
+                            .border(1.dp, Color(0xFF222733), RoundedCornerShape(16.dp))
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = profile.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = if (blockedCount > 0)
-                                    "$blockedCount app${if (blockedCount == 1) "" else "s"} shielded"
-                                else "No apps yet",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (blockedCount > 0)
-                                    MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                                else
-                                    MaterialTheme.colorScheme.primary
+                        Text(
+                            text = profile.name,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "$blockedCount app${if (blockedCount == 1) "" else "s"} shielded",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        )
+                        if (blockedCount > 0) {
+                            Spacer(Modifier.height(12.dp))
+                            BlockedAppIconRow(
+                                context = context,
+                                apps = blockedApps,
+                                bg = Color(0xFF12151C)
                             )
                         }
-                        SmallActionButton(
-                            text = "Edit apps",
-                            onClick = { onOpenPicker(profile.id) },
-                            active = false
-                        )
+                        if (runningSession != null) {
+                            Spacer(Modifier.height(16.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(32.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = formatDuration(now - runningSession!!.startTime),
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = Color(0xFF00E5FF)
+                                    )
+                                    Text(
+                                        text = "this session",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = formatDuration(totalMs),
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = Color(0xFFE6EAF0)
+                                    )
+                                    Text(
+                                        text = "total focus",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                                    )
+                                }
+                            }
+                        }
                     }
+                }
 
-                    Spacer(Modifier.height(10.dp))
-                    SecondaryButton(
-                        text = "Manage modes",
-                        icon = "⚙",
-                        onClick = { showModeManager = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 40.dp)
-                    )
-
-                    // ---- Blocked-app icon row (transparency: see exactly what's
-                    // shielded) — mirrors the QS tile panel's icon row. ----
-                    if (blockedCount > 0) {
+                // Mode selector (when OFF)
+                if (!isActive) {
+                    if (profiles.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF12151C))
+                                .border(1.dp, Color(0xFF222733), RoundedCornerShape(16.dp))
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No focus mode yet",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "Create a mode to start shielding apps",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            SecondaryButton(
+                                text = "Create your first mode",
+                                icon = "+",
+                                onClick = { showModeManager = true },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "SELECT MODE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                            modifier = Modifier.align(Alignment.Start)
+                        )
                         Spacer(Modifier.height(10.dp))
-                        BlockedAppIconRow(
-                            context = context,
-                            apps = blockedApps,
-                            bg = bgColor
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF12151C))
+                                .border(1.dp, Color(0xFF222733), RoundedCornerShape(16.dp))
+                        ) {
+                            profilesWithCount.forEachIndexed { index, p ->
+                                val isSelected = activeProfile?.id == p.id
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(
+                                            if (index < profilesWithCount.lastIndex)
+                                                Modifier.border(
+                                                    width = 0.dp,
+                                                    color = Color.Transparent,
+                                                    shape = RoundedCornerShape(0.dp)
+                                                )
+                                            else Modifier
+                                        )
+                                        .clickable {
+                                            Haptics.tick(context)
+                                            scope.launch {
+                                                dao.clearActive()
+                                                dao.setActive(p.id, true)
+                                                AppLog.d("Dashboard: selected mode '${p.name}' (id=${p.id})")
+                                            }
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .border(
+                                                width = 2.dp,
+                                                color = if (isSelected) Color(0xFF00E5FF) else Color(0xFF3A4150),
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(10.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF00E5FF))
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = p.name,
+                                            fontSize = 15.sp,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                            color = if (isSelected) Color.White
+                                            else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = if (p.appCount > 0)
+                                                "${p.appCount} app${if (p.appCount == 1) "" else "s"}"
+                                            else "No apps yet",
+                                            fontSize = 12.sp,
+                                            color = if (p.appCount > 0)
+                                                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                                            else Color(0xFF00E5FF).copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    SmallActionButton(
+                                        text = "Edit",
+                                        onClick = { onOpenPicker(p.id) },
+                                        active = false
+                                    )
+                                }
+                                if (index < profilesWithCount.lastIndex) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(1.dp)
+                                            .background(Color(0xFF222733))
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(14.dp))
+                        SecondaryButton(
+                            text = "Manage modes",
+                            icon = "+",
+                            onClick = { showModeManager = true },
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                } else {
-                    Spacer(Modifier.height(12.dp))
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // ---- 3. Collapsible stats ----
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF12151C))
+                        .border(1.dp, Color(0xFF222733), RoundedCornerShape(12.dp))
+                        .clickable {
+                            Haptics.tick(context)
+                            showStats = !showStats
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "No focus mode yet",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Stats & History",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = if (showStats) "▲" else "▼",
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                     )
-                    Spacer(Modifier.height(10.dp))
-                    SecondaryButton(
-                        text = "Choose apps to shield",
-                        icon = "+",
-                        onClick = {
-                            val profileId = createDefaultProfile(dao)
-                            onOpenPicker(profileId)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 40.dp)
-                    )
                 }
-            }
 
-            // ---- 3. BOTTOM: Anchored dashboard (NO weight — pinned to bottom) ----
-            // The center's weight(1f) absorbs all extra space, so this block is
-            // permanently pinned to the bottom edge and can never be pushed
-            // off-screen by the center content.
-            if (isActive) {
-                // ---- Active: live session stats ----
-                StatsRow(
-                    sessionMs = if (runningSession != null)
-                        (now - runningSession!!.startTime) else 0L,
-                    totalMs = totalMs,
-                    completedCount = completedCount
-                )
-            } else {
-                // ---- Inactive: the Focus Telemetry Console ----
-                TelemetryConsole(
-                    topIntercepted = topIntercepted,
-                    totalIntercepts = totalIntercepts,
-                    totalMs = totalMs,
-                    peakHour = peakHour,
-                    dailyTelemetry = dailyTelemetry,
-                    dossierBusy = dossierBusy,
-                    onShareDossier = { onShareDossier() }
-                )
-            }
+                if (showStats) {
+                    Spacer(Modifier.height(10.dp))
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        TelemetryConsole(
+                            topIntercepted = topIntercepted,
+                            totalIntercepts = totalIntercepts,
+                            totalMs = totalMs,
+                            peakHour = peakHour,
+                            dailyTelemetry = dailyTelemetry
+                        )
+                        if (recentSessions.isNotEmpty()) {
+                            Spacer(Modifier.height(16.dp))
+                            SessionHistory(sessions = recentSessions, dao = dao)
+                        }
+                    }
+                }
 
-            Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(32.dp))
+            }
         }
 
         if (showModeManager) {
@@ -375,88 +537,59 @@ fun MainScreen(
                 }
             }
         }
-    }
-}
 
-// ---------------------------------------------------------------------------
-// Tactical HUD Header — top-left brand + live system status
-// ---------------------------------------------------------------------------
-//
-// Replaces the old centered "NullFlow" + tagline. Asymmetrical top-left
-// alignment mimics command-line / aviation HUD / security-software aesthetics.
-// The status line is state-driven: cyan "SECURE" when the shield is active,
-// muted grey "STANDBY" when off.
-//
-// Uses statusBarsPadding() to avoid the notch / camera cutout / status bar.
-
-@Composable
-private fun HudHeader(isShieldActive: Boolean) {
-    // Status colors (state-driven).
-    val nodeColor = if (isShieldActive) Color(0xFF00E5FF) else Color(0xFF4A4E58)
-    val textColor = if (isShieldActive) Color(0xFF00E5FF) else Color(0xFF8A8F99)
-    val statusText = if (isShieldActive) "SYS.STATUS: SECURE" else "SYS.STATUS: STANDBY"
-
-    // Animate the node color + glow so the transition feels alive.
-    val animatedNodeColor by animateColorAsState(
-        targetValue = nodeColor,
-        animationSpec = tween(400),
-        label = "hudNode"
-    )
-    val animatedTextColor by animateColorAsState(
-        targetValue = textColor,
-        animationSpec = tween(400),
-        label = "hudText"
-    )
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (isShieldActive) 0.6f else 0f,
-        animationSpec = tween(400),
-        label = "hudGlow"
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
-    ) {
-        // Main brand: "NULLFLOW" all-caps, heavy weight, wide letter spacing.
-        Text(
-            text = "NULLFLOW",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.92f)
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        // Dynamic status line: glowing node + monospace status text.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Status node (6dp circle). Glows cyan when active.
+        if (showNoAppsWarning) {
             Box(
                 modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(animatedNodeColor)
-                    .shadow(
-                        elevation = if (isShieldActive) 8.dp else 0.dp,
-                        shape = CircleShape,
-                        ambientColor = Color(0xFF00E5FF).copy(alpha = glowAlpha),
-                        spotColor = Color(0xFF00E5FF).copy(alpha = glowAlpha)
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .clickable { showNoAppsWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF12151C))
+                        .border(1.dp, Color(0xFF222733), RoundedCornerShape(16.dp))
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "No apps in this mode",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
                     )
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = statusText,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 0.5.sp,
-                color = animatedTextColor
-            )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Add at least one app to shield before turning on.",
+                        fontSize = 13.sp,
+                        color = Color(0xFFA0A0A0)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    PrimaryButton(
+                        text = "Add apps",
+                        onClick = {
+                            showNoAppsWarning = false
+                            val profileId = effectiveProfile?.id ?: createDefaultProfile(dao)
+                            onOpenPicker(profileId)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    GhostButton(
+                        text = "Cancel",
+                        onClick = { showNoAppsWarning = false }
+                    )
+                }
+            }
         }
     }
 }
+
+
 
 // ---------------------------------------------------------------------------
 // Focus Telemetry Console (inactive state)
@@ -491,9 +624,7 @@ private fun TelemetryConsole(
     totalIntercepts: Int,
     totalMs: Long,
     peakHour: PeakHourStats?,
-    dailyTelemetry: List<DailyFocusStats>,
-    dossierBusy: Boolean,
-    onShareDossier: () -> Unit
+    dailyTelemetry: List<DailyFocusStats>
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -586,13 +717,6 @@ private fun TelemetryConsole(
             )
         }
 
-        Spacer(Modifier.height(14.dp))
-
-        // ---- Share the Zero-Leak Dossier ----
-        ShareDossierButton(
-            busy = dossierBusy,
-            onClick = onShareDossier
-        )
     }
 }
 
@@ -944,146 +1068,120 @@ private fun AwaitingTelemetryWireframe() {
 // Share dossier button
 // ---------------------------------------------------------------------------
 
-@Composable
-private fun ShareDossierButton(busy: Boolean, onClick: () -> Unit) {
-    PrimaryButton(
-        text = if (busy) "Generating…" else "Share my focus dossier",
-        icon = "📋",
-        onClick = onClick,
-        enabled = !busy
-    )
-}
+
 
 // ---------------------------------------------------------------------------
 // Hero Toggle
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun HeroToggle(isActive: Boolean, onClick: () -> Unit) {
+private fun HeroToggle(isActive: Boolean, label: String, onClick: () -> Unit) {
     val scale by animateFloatAsState(
         targetValue = if (isActive) 1f else 0.96f,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        animationSpec = tween(350, easing = FastOutSlowInEasing),
         label = "toggleScale"
     )
-    val ringColor = if (isActive) Color(0xFF4F8CFF) else Color(0xFF3A4150)
     val glowAlpha by animateFloatAsState(
-        targetValue = if (isActive) 0.55f else 0f,
-        animationSpec = tween(600),
+        targetValue = if (isActive) 0.6f else 0f,
+        animationSpec = tween(700),
         label = "glow"
     )
+    val borderColor by animateColorAsState(
+        targetValue = if (isActive) Color(0xFF00E5FF) else Color(0xFF2A2F3A),
+        animationSpec = tween(500),
+        label = "borderColor"
+    )
+
+    // Pulse animation when active
+    var pulsePhase by remember { mutableStateOf(0f) }
+    LaunchedEffect(isActive) {
+        if (isActive) {
+            while (true) {
+                pulsePhase = 0f
+                val start = System.currentTimeMillis()
+                while (pulsePhase < 1f) {
+                    pulsePhase = ((System.currentTimeMillis() - start) % 2000) / 2000f
+                    delay(50)
+                }
+            }
+        }
+    }
+    val pulseGlow = if (isActive) 0.3f + 0.3f * (0.5f + 0.5f * kotlin.math.sin(pulsePhase * 2 * kotlin.math.PI).toFloat()) else 0f
 
     Box(
         modifier = Modifier
-            .size(220.dp)
+            .size(190.dp)
             .scale(scale)
-            // 3D extruded hardware feel:
-            //  1) Dark, offset drop-shadow to the bottom-right (depth).
             .shadow(
-                elevation = if (isActive) 26.dp else 14.dp,
+                elevation = if (isActive) 28.dp else 12.dp,
                 shape = CircleShape,
                 clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.55f),
-                spotColor = Color.Black.copy(alpha = 0.55f)
+                ambientColor = if (isActive) Color(0xFF00E5FF).copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f),
+                spotColor = if (isActive) Color(0xFF00E5FF).copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f)
             )
-            .background(
-                color = if (isActive) Color(0xFF4F8CFF).copy(alpha = glowAlpha) else Color.Transparent,
-                shape = CircleShape
-            )
-            .padding(14.dp)
-            //  2) Body with a top-left light → bottom-right dark gradient (bevel).
+            .clip(CircleShape)
             .background(
                 brush = Brush.linearGradient(
                     colors = if (isActive)
-                        listOf(Color(0xFF1B2A44), Color(0xFF0C1420))
+                        listOf(Color(0xFF0D2A30), Color(0xFF0A1A20))
                     else
-                        listOf(Color(0xFF23272F), Color(0xFF14171D)),
+                        listOf(Color(0xFF1A1E26), Color(0xFF10131A)),
                     start = Offset(0f, 0f),
                     end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                ),
+                )
+            )
+            .border(
+                width = 3.dp,
+                color = borderColor,
                 shape = CircleShape
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        //  3) Subtle semi-transparent white highlight on the top-left (specular).
+        // Specular highlight
         Box(
             modifier = Modifier
-                .size(220.dp)
-                .padding(14.dp)
+                .fillMaxSize()
                 .clip(CircleShape)
                 .background(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.10f),
+                            Color.White.copy(alpha = 0.06f),
                             Color.White.copy(alpha = 0f)
                         ),
-                        center = Offset(70f, 70f),
-                        radius = 260f
+                        center = Offset(60f, 60f),
+                        radius = 200f
                     )
                 )
         )
 
-        // Inner ring
-        Box(
-            modifier = Modifier
-                .size(150.dp)
-                .background(
-                    color = ringColor.copy(alpha = if (isActive) 0.18f else 0.08f),
-                    shape = CircleShape
-                )
-                .padding(6.dp)
-                .background(
-                    color = if (isActive) Color(0xFF4F8CFF) else Color(0xFF2A2F3A),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Status dot
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(if (isActive) Color(0xFF00E5FF) else Color(0xFF3A4150))
+                    .shadow(
+                        elevation = if (isActive) 10.dp else 0.dp,
+                        shape = CircleShape,
+                        ambientColor = Color(0xFF00E5FF).copy(alpha = if (isActive) 0.7f else 0f),
+                        spotColor = Color(0xFF00E5FF).copy(alpha = if (isActive) 0.7f else 0f)
+                    )
+            )
+            Spacer(Modifier.height(14.dp))
             Text(
-                text = if (isActive) "ON" else "OFF",
-                style = MaterialTheme.typography.headlineMedium,
+                text = label,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isActive) Color(0xFF0A0C10) else Color(0xFF8A93A6)
+                letterSpacing = 2.sp,
+                color = if (isActive) Color(0xFF00E5FF) else Color(0xFF8A93A6)
             )
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Stats (active session)
-// ---------------------------------------------------------------------------
 
-@Composable
-private fun StatsRow(sessionMs: Long, totalMs: Long, completedCount: Int) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        StatCell(
-            value = formatDuration(sessionMs),
-            label = if (sessionMs > 0) "this session" else "deep focus"
-        )
-        StatCell(value = formatDuration(totalMs), label = "all-time focus")
-        StatCell(value = "$completedCount", label = "sessions")
-    }
-}
-
-@Composable
-private fun StatCell(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
-        )
-    }
-}
 
 private fun formatDuration(ms: Long): String {
     if (ms <= 0) return "0m"
@@ -1227,5 +1325,71 @@ private fun BlockedAppIconRow(
                     )
                 )
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Session History — last 5 completed sessions
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun SessionHistory(
+    sessions: List<com.codezmr.nullflow.data.FocusSession>,
+    dao: FocusDao
+) {
+    val context = LocalContext.current
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "RECENT SESSIONS",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+        )
+        Spacer(Modifier.height(8.dp))
+
+        sessions.forEach { session ->
+            val durationMs = (session.endTime ?: System.currentTimeMillis()) - session.startTime
+            val profileName = remember(session.profileId) {
+                runCatching {
+                    kotlinx.coroutines.runBlocking { dao.getProfile(session.profileId)?.name }
+                }.getOrNull() ?: "Unknown"
+            }
+            val dateFmt = remember { SimpleDateFormat("MMM d, h:mm a", Locale.US) }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF12151C))
+                    .border(1.dp, Color(0xFF222733), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = profileName,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE6EAF0)
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = dateFmt.format(Date(session.startTime)),
+                        fontSize = 11.sp,
+                        color = Color(0xFF808080)
+                    )
+                }
+                Text(
+                    text = formatDuration(durationMs),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFF00E5FF)
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+        }
     }
 }

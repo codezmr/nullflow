@@ -10,8 +10,11 @@
 > ⚠️ **HARD RULE: NEVER build the APK without asking Zamir first.**
 > Discuss + finish all code changes, THEN ask "build or not?". Wait for the go-ahead.
 >
-> 🔒 **GIT IS LOCAL-ONLY — NO REMOTE, EVER.** `git init` + `git commit` only.
-> NEVER run `git remote add`, `git push`, or any network/git-cloud command.
+> 🔒 **GIT WORKFLOW:** public GitHub remote (`github.com/codezmr/nullflow`).
+> **NEVER touch `master`** — work on feature branches (currently `dev`).
+> **ALWAYS ask before commit/push. ALWAYS open an MR and hand the link over —
+> never merge it yourself.** Full rules in `GIT_INSTRUCTIONS.md`.
+> Never commit: `local.properties`, `.gradle/`, `build/`, `*.apk`, `*.aab`, `.weave/`.
 
 ---
 

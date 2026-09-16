@@ -179,7 +179,7 @@ fun TileFocusPanel(
             .padding(horizontal = 24.dp)
             .padding(top = 20.dp, bottom = 28.dp)
     ) {
-        // ---- Header row: title + master switch ----
+        // ---- Header row: screen name + master switch ----
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -187,14 +187,15 @@ fun TileFocusPanel(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Use Focus Shield",
+                    text = "FOCUS SHIELD",
                     color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = if (isShieldOn) "Shield active" else "Shield off",
+                    text = if (isShieldOn) "Shield on" else "Shield off",
                     color = if (isShieldOn) PanelAccent else PanelMuted,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium

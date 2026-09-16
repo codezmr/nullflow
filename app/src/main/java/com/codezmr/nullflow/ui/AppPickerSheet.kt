@@ -139,7 +139,7 @@ fun AppPickerSheet(
         }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ---- Header ----
+            // ---- Header: screen name + back + count ----
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -147,15 +147,29 @@ fun AppPickerSheet(
                     .padding(bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(GlassSurface)
+                        .border(1.dp, BorderUnselected, CircleShape)
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("←", fontSize = 14.sp, color = MutedText)
+                }
+                Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Choose apps to silence",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    text = "SELECT APPS",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     modifier = Modifier.weight(1f)
                 )
                 val shieldedCount = blockedPackages.size
                 Text(
-                    text = if (shieldedCount == 0) "No apps shielded" else "$shieldedCount Shielded",
+                    text = if (shieldedCount == 0) "0 shielded" else "$shieldedCount shielded",
                     style = MaterialTheme.typography.bodyMedium,
                     color = AccentCyan,
                     fontWeight = FontWeight.SemiBold
