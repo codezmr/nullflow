@@ -1,6 +1,6 @@
 package com.codezmr.nullflow.ui
 
-import android.os.VibrationEffect
+import android.graphics.Bitmap
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -61,7 +61,8 @@ import com.codezmr.nullflow.data.BlockedApp
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.InstalledApp
 import com.codezmr.nullflow.data.PackageManagerRepo
-import com.codezmr.nullflow.ui.tile.rememberAppIconPainter
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import kotlinx.coroutines.launch
 
 // ---- Focus Matrix palette ----
@@ -199,11 +200,11 @@ fun AppPickerSheet(
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filtered, key = { it.packageName }) { app ->
-                    TactileAppCard(
-                        appName = app.label,
-                        packageName = app.packageName,
-                        isShielded = app.packageName in blockedPackages,
+                    items(filtered, key = { it.packageName }) { app ->
+                        TactileAppCard(
+                            appName = app.label,
+                            iconBitmap = app.icon,
+                            isShielded = app.packageName in blockedPackages,
                         onToggle = {
                             Haptics.thud(context)
                             toggleApp(dao, scope, profileId, app, app.packageName in blockedPackages)
@@ -265,13 +266,13 @@ fun AppPickerSheet(
 @Composable
 private fun TactileAppCard(
     appName: String,
-    packageName: String,
+    iconBitmap: Bitmap,
     isShielded: Boolean,
     onToggle: () -> Unit
 ) {
-    val context = LocalContext.current
-    // Reuse the proven tile-panel icon loader (async, cached, BitmapPainter).
-    val iconPainter = rememberAppIconPainter(context, packageName)
+    // Icon is already loaded + cached by PackageManagerRepo — render it
+    // directly. No second async load, so the slot is never empty.
+    val iconPainter = remember(iconBitmap) { BitmapPainter(iconBitmap.asImageBitmap()) }
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
