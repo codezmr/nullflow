@@ -167,4 +167,18 @@ interface FocusDao {
     /** Number of completed sessions (interruptions "allowed" = 0 by design). */
     @Query("SELECT COUNT(*) FROM focus_sessions WHERE endTime IS NOT NULL")
     fun observeCompletedCount(): Flow<Int>
+
+    // ---------- Data management ----------
+
+    @Query("DELETE FROM focus_sessions")
+    suspend fun clearAllSessions()
+
+    @Query("DELETE FROM intercept_logs")
+    suspend fun clearAllIntercepts()
+
+    @Query("SELECT * FROM focus_sessions WHERE endTime IS NOT NULL ORDER BY startTime DESC")
+    suspend fun getAllCompletedSessions(): List<FocusSession>
+
+    @Query("SELECT * FROM intercept_logs ORDER BY timestamp DESC LIMIT 1000")
+    suspend fun getRecentIntercepts(): List<InterceptLog>
 }

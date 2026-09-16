@@ -7,17 +7,12 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import com.codezmr.nullflow.data.Settings
 
-/**
- * Haptic feedback — the "pulling a heavy lever / locking a door" feel.
- *
- *  - [tick]      : light touch-down tick (50ms, medium amplitude)
- *  - [engage]    : heavy successful-activation thud (100ms, max amplitude)
- *  - [disengage] : medium release (70ms)
- */
 object Haptics {
 
     private fun vibrator(context: Context): Vibrator? {
+        if (!Settings.get(context).hapticsEnabled) return null
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
                 as? VibratorManager
@@ -28,11 +23,6 @@ object Haptics {
         }
     }
 
-    /**
-     * Expose the system [Vibrator] so callers can fire custom
-     * [VibrationEffect.Composition] patterns (e.g., the SwipeToArmSlider's
-     * heavy "arm" thud). Returns null if no vibrator is available.
-     */
     fun vibratorFor(context: Context): Vibrator? = vibrator(context)
 
     fun tick(context: Context) {
@@ -47,10 +37,6 @@ object Haptics {
         vibrator(context)?.vibrate(VibrationEffect.createOneShot(70, 180))
     }
 
-    /**
-     * Crisp "locking a physical latch" thud for the Focus Matrix tactile cards
-     * (40ms, full amplitude).
-     */
     fun thud(context: Context) {
         vibrator(context)?.vibrate(
             VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
@@ -58,6 +44,5 @@ object Haptics {
     }
 }
 
-/** Convenience composable accessor. */
 @Composable
 fun rememberHaptics() = Haptics
