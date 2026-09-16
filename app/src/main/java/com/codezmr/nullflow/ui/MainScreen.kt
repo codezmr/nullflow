@@ -115,10 +115,11 @@ fun MainScreen(
         .collectAsState(initial = emptyList())
 
     // The profile the UI is "pointing at": the active one if set, otherwise the
-    // first existing profile. This keeps the profile row, the blocked-app count,
-    // and the toggle all in agreement (and stops the toggle from minting a new
-    // empty profile on every tap).
-    val effectiveProfile: FocusProfile? = activeProfile ?: profiles.firstOrNull()
+    // user's default (from Settings), otherwise the first existing profile.
+    val settings = remember { com.codezmr.nullflow.data.Settings.get(context) }
+    val effectiveProfile: FocusProfile? = activeProfile
+        ?: profiles.firstOrNull { it.id == settings.defaultProfileId }
+        ?: profiles.firstOrNull()
 
     // Live count of blocked apps for the effective profile (drives the "add apps"
     // guard + the "N apps shielded" stat).
@@ -256,6 +257,8 @@ fun MainScreen(
                 HeroToggle(
                     isActive = isActive,
                     label = if (isActive) "ON" else "OFF",
+                    compact = settings.compactMode,
+                    accent = accentColorFromSettings(settings.accentColor),
                     onClick = { onToggle() }
                 )
 
@@ -265,7 +268,7 @@ fun MainScreen(
                     text = if (isActive) "Shield on" else "Shield off",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isActive) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    color = if (isActive) accentColorFromSettings(settings.accentColor) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
 
                 Spacer(Modifier.height(28.dp))
@@ -924,7 +927,14 @@ private fun lerpColor(from: Color, to: Color, t: Float): Color {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun HeroToggle(isActive: Boolean, label: String, onClick: () -> Unit) {
+private fun HeroToggle(
+    isActive: Boolean,
+    label: String,
+    compact: Boolean = false,
+    accent: Color = Color(0xFF00E5FF),
+    onClick: () -> Unit
+) {
+    val size = if (compact) 140.dp else 190.dp
     val scale by animateFloatAsState(
         targetValue = if (isActive) 1f else 0.96f,
         animationSpec = tween(350, easing = FastOutSlowInEasing),
@@ -936,7 +946,7 @@ private fun HeroToggle(isActive: Boolean, label: String, onClick: () -> Unit) {
         label = "glow"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isActive) Color(0xFF00E5FF) else Color(0xFF2A2F3A),
+        targetValue = if (isActive) accent else Color(0xFF2A2F3A),
         animationSpec = tween(500),
         label = "borderColor"
     )
@@ -959,20 +969,20 @@ private fun HeroToggle(isActive: Boolean, label: String, onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
-            .size(190.dp)
+            .size(size)
             .scale(scale)
             .shadow(
                 elevation = if (isActive) 28.dp else 12.dp,
                 shape = CircleShape,
                 clip = false,
-                ambientColor = if (isActive) Color(0xFF00E5FF).copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f),
-                spotColor = if (isActive) Color(0xFF00E5FF).copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f)
+                ambientColor = if (isActive) accent.copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f),
+                spotColor = if (isActive) accent.copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f)
             )
             .clip(CircleShape)
             .background(
                 brush = Brush.linearGradient(
                     colors = if (isActive)
-                        listOf(Color(0xFF0D2A30), Color(0xFF0A1A20))
+                        listOf(accent.copy(alpha = 0.12f), accent.copy(alpha = 0.05f))
                     else
                         listOf(Color(0xFF1A1E26), Color(0xFF10131A)),
                     start = Offset(0f, 0f),
@@ -1010,27 +1020,33 @@ private fun HeroToggle(isActive: Boolean, label: String, onClick: () -> Unit) {
                 modifier = Modifier
                     .size(14.dp)
                     .clip(CircleShape)
-                    .background(if (isActive) Color(0xFF00E5FF) else Color(0xFF3A4150))
+                    .background(if (isActive) accent else Color(0xFF3A4150))
                     .shadow(
                         elevation = if (isActive) 10.dp else 0.dp,
                         shape = CircleShape,
-                        ambientColor = Color(0xFF00E5FF).copy(alpha = if (isActive) 0.7f else 0f),
-                        spotColor = Color(0xFF00E5FF).copy(alpha = if (isActive) 0.7f else 0f)
+                        ambientColor = accent.copy(alpha = if (isActive) 0.7f else 0f),
+                        spotColor = accent.copy(alpha = if (isActive) 0.7f else 0f)
                     )
             )
             Spacer(Modifier.height(14.dp))
             Text(
                 text = label,
-                fontSize = 18.sp,
+                fontSize = if (compact) 14.sp else 18.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp,
-                color = if (isActive) Color(0xFF00E5FF) else Color(0xFF8A93A6)
+                color = if (isActive) accent else Color(0xFF8A93A6)
             )
         }
     }
 }
 
 
+
+private fun accentColorFromSettings(name: String): Color = when (name) {
+    "green" -> Color(0xFF00FF88)
+    "purple" -> Color(0xFFB44CFF)
+    else -> Color(0xFF00E5FF)
+}
 
 private fun formatDuration(ms: Long): String {
     if (ms <= 0) return "0m"
