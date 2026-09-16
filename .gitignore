@@ -1,14 +1,29 @@
-*.iml
+# Gradle
 .gradle/
 build/
-local.properties
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
 .idea/
+*.iml
+.vscode/
 .DS_Store
+
+# Android
+local.properties
 captures/
 .cxx/
 *.apk
 *.aab
-apps/FocusWall/app/build/
+*.ap_
 
-# Weave tooling session artifacts (not project code/docs)
+# Build outputs
+apps/*/app/build/
+apps/*/build/
+
+# Session/tooling artifacts
 .weave/
+.code-review-graph/
+
+# Logs
+*.log
