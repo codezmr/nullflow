@@ -36,7 +36,7 @@ NullFlow uses Android's `VpnService` API to create a local tunnel. When the shie
 
 ```bash
 git clone https://github.com/codezmr/nullflow.git
-cd apps/NullFlow
+cd nullflow
 ./gradlew assembleDebug
 # APK at: app/build/outputs/apk/debug/NullFlow.apk
 ```
@@ -50,7 +50,7 @@ cd apps/NullFlow
 ## Architecture
 
 ```
-apps/NullFlow/
+nullflow/
 ├── app/src/main/java/com/codezmr/nullflow/
 │   ├── vpn/              # VpnService, packet filtering, rule engine
 │   ├── data/             # Room database (profiles, sessions, intercepts)
