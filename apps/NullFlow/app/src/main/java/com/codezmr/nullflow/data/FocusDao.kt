@@ -60,6 +60,12 @@ interface FocusDao {
     @Delete
     suspend fun deleteProfile(profile: FocusProfile)
 
+    @Query("DELETE FROM blocked_apps WHERE profileId = :profileId")
+    suspend fun deleteBlockedAppsByProfile(profileId: Long)
+
+    @Query("DELETE FROM focus_profiles WHERE id = :id")
+    suspend fun deleteProfileById(id: Long)
+
     // ---------- BlockedApp ----------
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)

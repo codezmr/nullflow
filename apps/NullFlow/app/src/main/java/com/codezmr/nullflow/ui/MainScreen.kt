@@ -87,6 +87,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var showModeManager by remember { mutableStateOf(false) }
 
     // ---- State from Room ----
     val profiles by dao.observeProfiles().collectAsState(initial = emptyList())
@@ -258,33 +259,41 @@ fun MainScreen(
                     Spacer(Modifier.height(12.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable {
-                            onOpenPicker(profile.id)
-                        }
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = profile.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (blockedCount > 0)
-                                "$blockedCount app${if (blockedCount == 1) "" else "s"} shielded"
-                            else "No apps yet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (blockedCount > 0)
-                                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                            else
-                                MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = profile.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                            )
+                            Text(
+                                text = if (blockedCount > 0)
+                                    "$blockedCount app${if (blockedCount == 1) "" else "s"} shielded"
+                                else "No apps yet",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (blockedCount > 0)
+                                    MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                                else
+                                    MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        SmallActionButton(
                             text = "Edit apps",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            onClick = { onOpenPicker(profile.id) },
+                            active = false
                         )
                     }
+
+                    Spacer(Modifier.height(10.dp))
+                    SecondaryButton(
+                        text = "Manage modes",
+                        icon = "⚙",
+                        onClick = { showModeManager = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 40.dp)
+                    )
 
                     // ---- Blocked-app icon row (transparency: see exactly what's
                     // shielded) — mirrors the QS tile panel's icon row. ----
@@ -304,27 +313,17 @@ fun MainScreen(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                     )
                     Spacer(Modifier.height(10.dp))
-                    // Fresh install: give a clear way to pick apps BEFORE toggling on.
-                    // Styled as an OutlinedButton: dark surface + 1dp cyan border.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    SecondaryButton(
+                        text = "Choose apps to shield",
+                        icon = "+",
+                        onClick = {
+                            val profileId = createDefaultProfile(dao)
+                            onOpenPicker(profileId)
+                        },
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF12151C))
-                            .border(1.dp, Color(0xFF00E5FF), RoundedCornerShape(16.dp))
-                            .clickable {
-                                val profileId = createDefaultProfile(dao)
-                                onOpenPicker(profileId)
-                            }
-                            .padding(horizontal = 20.dp, vertical = 12.dp)
-                    ) {
-                        Text(
-                            text = "Choose apps to shield",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF00E5FF)
-                        )
-                    }
+                            .fillMaxWidth()
+                            .padding(horizontal = 40.dp)
+                    )
                 }
             }
 
@@ -354,6 +353,27 @@ fun MainScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+
+        if (showModeManager) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .clickable { showModeManager = false }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .clickable(enabled = false) { }
+                ) {
+                    ModeManagerSheet(
+                        dao = dao,
+                        onDismiss = { showModeManager = false }
+                    )
+                }
+            }
         }
     }
 }
@@ -786,6 +806,10 @@ private fun ActivityHeatmap(
     // The DAO always returns exactly 7 rows (oldest→newest, anchored at
     // localMidnight(now-6d)); days with no activity come back as zeros.
     val days = remember(daily) { daily }
+    if (days.isEmpty()) {
+        Box(modifier = modifier)
+        return
+    }
     // Normalize the Focus Score against the best day (deep work = 1.0).
     val maxScore = remember(days) {
         days.maxOf { focusScore(it) }.coerceAtLeast(1f)
@@ -922,31 +946,12 @@ private fun AwaitingTelemetryWireframe() {
 
 @Composable
 private fun ShareDossierButton(busy: Boolean, onClick: () -> Unit) {
-    val alpha by animateFloatAsState(
-        targetValue = if (busy) 0.6f else 1f,
-        animationSpec = tween(200),
-        label = "shareAlpha"
+    PrimaryButton(
+        text = if (busy) "Generating…" else "Share my focus dossier",
+        icon = "📋",
+        onClick = onClick,
+        enabled = !busy
     )
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFF00E5FF), Color(0xFF4F8CFF))
-                )
-            )
-            .clickable(enabled = !busy, onClick = onClick)
-            .padding(horizontal = 28.dp, vertical = 14.dp)
-    ) {
-        Text(
-            text = if (busy) "Generating…" else "Share my focus dossier",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF0A0C10).copy(alpha = alpha)
-        )
-    }
 }
 
 // ---------------------------------------------------------------------------
