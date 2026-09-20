@@ -182,6 +182,18 @@ fun OnboardingScreen(
             .collect { currentPage = it }
     }
 
+    // ---- Swipe guard: block swiping to page 2 (Enhancements) until the VPN
+    // permission is granted. The user must tap "Enable Local Shield" and grant
+    // it — swiping left/right cannot bypass the mandatory permission gate.
+    LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }
+            .collect { page ->
+                if (page >= 2 && !hasVpnPerm) {
+                    pagerState.scrollToPage(1)
+                }
+            }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
