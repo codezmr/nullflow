@@ -37,6 +37,7 @@ import com.codezmr.nullflow.ui.MainScreen
 import com.codezmr.nullflow.ui.ModeManagerSheet
 import com.codezmr.nullflow.ui.NullFlowTheme
 import com.codezmr.nullflow.ui.OnboardingScreen
+import com.codezmr.nullflow.ui.ScheduleEditorScreen
 import com.codezmr.nullflow.vpn.FocusVpnService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
         // Logging + crash capture MUST be first - before anything can fail.
         AppLog.init(applicationContext)
         installCrashHandler()
+        com.codezmr.nullflow.service.ScheduleManager.init(applicationContext)
         AppLog.d("MainActivity.onCreate (savedState=${savedInstanceState != null})")
 
         super.onCreate(savedInstanceState)
@@ -182,6 +184,8 @@ class MainActivity : ComponentActivity() {
                     // creation happens here - a standard window where the
                     // keyboard opens reliably (no nested-sheet IME bugs).
                     var showCreateMode by remember { mutableStateOf(false) }
+                    // Full-screen schedule manager (recurring focus windows).
+                    var showSchedules by remember { mutableStateOf(false) }
 
                     MainScreen(
                         dao = dao,
@@ -193,6 +197,10 @@ class MainActivity : ComponentActivity() {
                         onCreateMode = {
                             AppLog.d("dashboard: create mode → opening CreateModeScreen")
                             showCreateMode = true
+                        },
+                        onOpenSchedules = {
+                            AppLog.d("settings: open schedules → opening ScheduleEditorScreen")
+                            showSchedules = true
                         }
                     )
 
@@ -243,6 +251,16 @@ class MainActivity : ComponentActivity() {
                             onBack = {
                                 AppLog.d("CreateModeScreen: back → closing")
                                 showCreateMode = false
+                            }
+                        )
+                    }
+
+                    if (showSchedules) {
+                        ScheduleEditorScreen(
+                            dao = dao,
+                            onBack = {
+                                AppLog.d("ScheduleEditorScreen: back → closing")
+                                showSchedules = false
                             }
                         )
                     }

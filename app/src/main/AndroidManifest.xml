@@ -2,18 +2,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Haptic feedback on the hero toggle -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-
     <!-- Focus timer notification (Android 13+ runtime permission) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Keep the VPN tunnel alive as a foreground service (Android 12+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- Auto-start shield on device boot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Exact alarms for scheduled focus sessions (granted by default on
+         Android 13+, not user-revocable - safe for GitHub distribution). -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Required by ConnectivityManager.registerNetworkCallback (VPN slot
+         conflict detection). Normal permission, auto-granted at install. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Populate the app picker with the user's installed apps.
          QUERY_ALL_PACKAGES is required on Android 11+ to see all packages.
@@ -46,11 +51,14 @@
             android:name=".vpn.FocusVpnService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_VPN_SERVICE">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local VPN-based network firewall that blocks selected apps during a user-initiated focus session" />
         </service>
 
         <!-- GhostShield: the Quick Settings tile. Tapping it opens the native
@@ -87,6 +95,19 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Receives exact alarms from ScheduleManager to start/stop the
+             shield on schedule. Not exported: only our own AlarmManager
+             PendingIntents target it. -->
+        <receiver
+            android:name=".service.SessionReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.codezmr.nullflow.action.START_SESSION" />
+                <action android:name="com.codezmr.nullflow.action.STOP_SESSION" />
             </intent-filter>
         </receiver>
     </application>

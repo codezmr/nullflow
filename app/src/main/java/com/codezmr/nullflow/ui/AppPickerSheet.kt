@@ -79,8 +79,7 @@ private val BadgeUnselected = Color(0xFF1E2430)
  *
  *  - Sticky dark-glass search bar (filters the entire list by label).
  *  - Tactile App Cards: unselected = dark + "+ ADD"; selected = cyan glow +
- *    "🔒 SHIELDED" + vibrant icon with a radial halo. Micro-spring press +
- *    thud haptic.
+ *    "🔒 SHIELDED" + vibrant icon with a radial halo. Micro-spring press.
  *  - "Done · N apps selected" bar at the bottom.
  *
  *  Users build their own modes by picking individual apps - no opaque
@@ -246,7 +245,6 @@ fun AppPickerContent(
                     iconBitmap = app.icon,
                     isShielded = app.packageName in blockedPackages,
                     onToggle = {
-                        Haptics.thud(context)
                         toggleApp(dao, scope, profileId, app, app.packageName in blockedPackages)
                     }
                 )
@@ -274,7 +272,6 @@ fun AppPickerContent(
             PrimaryButton(
                 text = actionLabel,
                 onClick = {
-                    Haptics.engage(context)
                     onAction()
                 }
             )

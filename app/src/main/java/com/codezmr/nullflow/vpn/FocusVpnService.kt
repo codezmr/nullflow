@@ -8,6 +8,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.widget.RemoteViews
@@ -152,6 +156,21 @@ class FocusVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
+     * Watches for our VPN network being LOST by the OS. This is the slot-conflict
+     * detector: when another VPN (school VPN, WireGuard, etc.) takes the single
+     * Android VPN slot, the framework tears down our tun0 at the kernel level and
+     * our TRANSPORT_VPN network is lost. onRevoke() does NOT fire in that case on
+     * many OEMs (MIUI/ColorOS bypass it), so without this callback the UI would
+     * show "Shield ON" while the kernel has already destroyed the tunnel (zombie
+     * state).
+     *
+     * Registered in startShield() after establish(); unregistered at the START of
+     * teardown() (before the fd closes) so a self-induced loss never re-triggers
+     * the handler.
+     */
+    private var vpnDisplacementCallback: ConnectivityManager.NetworkCallback? = null
+
+    /**
      * Blocked-app Room IDs for the CURRENT tunnel, used for round-robin
      * attribution of deflected pings. Set when the tunnel is established
      * (startShield / refreshRules). Empty if the tunnel has no apps.
@@ -256,6 +275,10 @@ class FocusVpnService : VpnService() {
         AppLog.d("teardown: stopping shield (shouldRun=$shouldRun, fd=${interfaceFd != null})")
         shouldRun = false
         isShieldRunning = false
+        // -1) Unregister the VPN-displacement watcher FIRST. Closing the fd below
+        //      loses our VPN network, which would fire onLost; unregistering before
+        //      the close guarantees a self-induced loss never re-enters teardown.
+        unregisterVpnDisplacementListener()
         // 0) Cool the reactor core + clear the heat window + reset the timer.
         synchronized(heatLock) { heatWindow.clear() }
         _heatState.value = HeatState(0, 0f)
@@ -325,6 +348,69 @@ class FocusVpnService : VpnService() {
             } finally {
                 scope.cancel()
             }
+        }
+    }
+
+    /**
+     * Register a watcher for our VPN network being lost by the OS (slot conflict).
+     *
+     * When another VPN takes the single Android VPN slot, the framework destroys
+     * our tun0 and our TRANSPORT_VPN network is lost. onRevoke() does not fire in
+     * that case on many OEMs, so this callback is the reliable detector. On loss
+     * we dispatch to the IO scope and run a full teardown (which clears Room, so
+     * the QS tile + dashboard flip to OFF via the existing reactive pipeline).
+     *
+     * The handler checks [shouldRun] before acting: if we initiated the teardown
+     * ourselves (user stop, auto-stop, etc.) shouldRun is already false and we
+     * ignore the self-induced loss.
+     */
+    private fun registerVpnDisplacementListener() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+            .build()
+        vpnDisplacementCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(network: Network) {
+                super.onLost(network)
+                AppLog.w("VPN network LOST (slot conflict or self-teardown) - shouldRun=$shouldRun")
+                if (!shouldRun) {
+                    // We initiated the teardown ourselves; the loss is expected.
+                    AppLog.d("VPN loss ignored (we already tore down)")
+                    return
+                }
+                // Another VPN took the slot. Dispatch to IO and tear down.
+                serviceScope.launch {
+                    AppLog.w("VPN displaced by another VPN - tearing down shield")
+                    teardown()
+                }
+            }
+        }
+        try {
+            cm.registerNetworkCallback(request, vpnDisplacementCallback!!)
+            AppLog.d("VPN displacement listener registered")
+        } catch (e: Exception) {
+            AppLog.e("registerVpnDisplacementListener FAILED", e)
+        }
+    }
+
+    /**
+     * Unregister the VPN-displacement watcher. Called at the START of teardown()
+     * (before the fd closes) so a self-induced loss never re-triggers onLost.
+     * Safe to call when nothing is registered (no-op).
+     */
+    private fun unregisterVpnDisplacementListener() {
+        vpnDisplacementCallback?.let { cb ->
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            try {
+                cm.unregisterNetworkCallback(cb)
+                AppLog.d("VPN displacement listener unregistered")
+            } catch (e: IllegalArgumentException) {
+                // Already unregistered (e.g. double teardown) - safe to ignore.
+                AppLog.d("VPN displacement listener already unregistered")
+            } catch (e: Exception) {
+                AppLog.e("unregisterVpnDisplacementListener FAILED", e)
+            }
+            vpnDisplacementCallback = null
         }
     }
 
@@ -426,6 +512,7 @@ class FocusVpnService : VpnService() {
         startInterceptFlusher()
         startTimerUpdates()
         startAutoStopTimer()
+        registerVpnDisplacementListener()
         AppLog.d("Shield ACTIVE - ${packages.size} apps blackholed. fd=$fd")
     }
 
@@ -987,6 +1074,10 @@ class FocusVpnService : VpnService() {
             AppLog.e("closing VPN fd failed", e)
         }
         interfaceFd = null
+        // Belt-and-suspenders: ensure the displacement watcher is gone even if
+        // teardown() didn't run (e.g. process killed by the OS). No-op if already
+        // unregistered.
+        unregisterVpnDisplacementListener()
         // CRITICAL: remove the foreground notification + VPN status-bar icon.
         // Without this the "Local Privacy Shield is active" notification and the
         // VPN icon linger after the shield is turned off.

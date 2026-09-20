@@ -89,7 +89,7 @@ import kotlinx.coroutines.launch
 
 /**
  * The whole app in one screen (Big Tech approach):
- *  - Hero toggle (massive, animated, haptic)
+ *  - Hero toggle (massive, animated)
  *  - Focus Telemetry Console (live interception data from the VPN blackhole)
  *  - Profile name + "edit apps" entry point (app picker sheet)
  *
@@ -101,7 +101,8 @@ fun MainScreen(
     dao: FocusDao,
     onOpenPicker: (Long) -> Unit,
     onOpenModeManager: () -> Unit,
-    onCreateMode: () -> Unit
+    onCreateMode: () -> Unit,
+    onOpenSchedules: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -195,7 +196,6 @@ fun MainScreen(
 
     // ---- Hero toggle action (INSTANT - consent was handled in onboarding) ----
     fun onToggle() {
-        Haptics.tick(context)
         val current = activeProfile
         AppLog.d("TOGGLE tapped: isActive=$isActive activeProfile=${current?.name} runningSession=${runningSession != null}")
         if (isActive) {
@@ -203,7 +203,6 @@ fun MainScreen(
             AppLog.d("TOGGLE → turning OFF (stop service + end session)")
             stopShield(context)
             endCurrentSession(dao, scope)
-            Haptics.disengage(context)
         } else {
             // Turn ON - one tap, zero popups.
             //
@@ -215,7 +214,6 @@ fun MainScreen(
             val vpnReady = android.net.VpnService.prepare(context) == null
             if (!vpnReady) {
                 AppLog.w("TOGGLE → blocked, VPN permission not granted. Routing to grant.")
-                Haptics.tick(context)
                 requestVpnPermission(context)
                 return
             }
@@ -227,14 +225,12 @@ fun MainScreen(
             // Guard: nothing to shield → show a clear message.
             if (blockedCount == 0) {
                 AppLog.w("TOGGLE → blocked, 0 apps in profile $profileId. Showing warning.")
-                Haptics.tick(context)
                 showNoAppsWarning = true
                 return
             }
 
             AppLog.d("TOGGLE → turning ON for profileId=$profileId ($blockedCount apps)")
             startShield(context, dao, profileId)
-            Haptics.engage(context)
         }
     }
 
@@ -355,7 +351,6 @@ fun MainScreen(
                             .background(Color(0xFF1A1F2E))
                             .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(12.dp))
                             .clickable {
-                                Haptics.tick(context)
                                 context.startService(
                                     com.codezmr.nullflow.vpn.FocusVpnService.emergencyPassIntent(context)
                                 )
@@ -551,7 +546,6 @@ fun MainScreen(
                                             else Modifier
                                         )
                                         .clickable {
-                                            Haptics.tick(context)
                                             scope.launch {
                                                 dao.clearActive()
                                                 dao.setActive(p.id, true)
@@ -638,7 +632,6 @@ fun MainScreen(
                         .background(Color(0xFF12151C))
                         .border(1.dp, Color(0xFF222733), RoundedCornerShape(12.dp))
                         .clickable {
-                            Haptics.tick(context)
                             showStats = !showStats
                         }
                         .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -744,7 +737,8 @@ fun MainScreen(
                 ) {
                     SettingsScreen(
                         dao = dao,
-                        onBack = { showSettings = false }
+                        onBack = { showSettings = false },
+                        onOpenSchedules = onOpenSchedules
                     )
                 }
             }
