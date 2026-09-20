@@ -775,6 +775,38 @@ class FocusVpnService : VpnService() {
             } catch (e: Exception) {
                 AppLog.e("snapBack: notification update failed", e)
             }
+            // Push a "Shield Activated" notification to alert the user.
+            sendShieldActivatedNotification()
+        }
+    }
+
+    /**
+     * Send a one-shot "Shield Activated" notification when the Tactical Pass
+     * ends and the blackhole snaps back. This alerts the user that their
+     * focus session is protected again.
+     */
+    private fun sendShieldActivatedNotification() {
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            // Use a distinct notification ID so this doesn't replace the HUD.
+            val passNotifId = NOTIF_ID + 1
+            val contentIntent = PendingIntent.getActivity(
+                this, 3,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val notification = Notification.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_shield_hud)
+                .setContentTitle("Shield Activated")
+                .setContentText("Tactical Pass ended. Your focus session is protected again.")
+                .setContentIntent(contentIntent)
+                .setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_STATUS)
+                .build()
+            nm.notify(passNotifId, notification)
+            AppLog.d("snapBack: 'Shield Activated' notification sent")
+        } catch (e: Exception) {
+            AppLog.e("snapBack: failed to send 'Shield Activated' notification", e)
         }
     }
 

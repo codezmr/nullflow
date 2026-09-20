@@ -132,6 +132,10 @@ fun MainScreen(
     val heatState by com.codezmr.nullflow.vpn.FocusVpnService
         .heatState.collectAsState(initial = com.codezmr.nullflow.vpn.HeatState(0, 0f))
 
+    // Tactical Pass countdown (0 when not active).
+    val passRemaining by com.codezmr.nullflow.vpn.FocusVpnService
+        .passRemaining.collectAsState(initial = 0)
+
     // Recent sessions, minus accidental tap-tap-tap junk (< 15s).
     val rawRecentSessions by dao.observeRecentSessions(20).collectAsState(initial = emptyList())
     val recentSessions = remember(rawRecentSessions) {
@@ -327,6 +331,7 @@ fun MainScreen(
                 HeroToggle(
                     isActive = isActive,
                     heatState = heatState,
+                    passRemaining = passRemaining,
                     compact = settings.compactMode,
                     accent = accentColorFromSettings(settings.accentColor),
                     onClick = { onToggle() }
@@ -1179,10 +1184,12 @@ private fun lerpColor(from: Color, to: Color, t: Float): Color {
 private fun HeroToggle(
     isActive: Boolean,
     heatState: com.codezmr.nullflow.vpn.HeatState,
+    passRemaining: Int = 0,
     compact: Boolean = false,
     accent: Color = Color(0xFF00E5FF),
     onClick: () -> Unit
 ) {
+    val isPassActive = passRemaining > 0
     val size = if (compact) 140.dp else 190.dp
     val scale by animateFloatAsState(
         targetValue = if (isActive) 1f else 0.96f,
@@ -1357,8 +1364,30 @@ private fun HeroToggle(
                     )
             )
 
-            // ---- Center content: live count when armed, OFF when disarmed ----
-            if (isActive) {
+            // ---- Center content: live count when armed, countdown during pass, OFF when disarmed ----
+            if (isActive && isPassActive) {
+                // Tactical Pass active: show countdown.
+                val passMins = passRemaining / 60
+                val passSecs = passRemaining % 60
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = String.format("%02d:%02d", passMins, passSecs),
+                        fontSize = if (compact) 28.sp else 40.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFFFB300),
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "PAUSED",
+                        fontSize = if (compact) 8.sp else 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.5.sp,
+                        color = Color(0xFFFFB300).copy(alpha = 0.7f)
+                    )
+                }
+            } else if (isActive) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "${heatState.count}",
