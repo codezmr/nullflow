@@ -345,6 +345,53 @@ fun SettingsScreen(
                 }
             }
 
+            // ---- DIAGNOSTICS section ----
+            SectionHeader("DIAGNOSTICS")
+            SettingCard {
+                SettingSwitchRow(
+                    title = "File logging",
+                    subtitle = if (settings.fileLoggingEnabled)
+                        "Saving a shareable log file"
+                    else
+                        "Log file saving is off",
+                    checked = settings.fileLoggingEnabled,
+                    onCheckedChange = {
+                        settings.fileLoggingEnabled = it
+                        AppLog.setFileLogging(it)
+                        refresh()
+                    }
+                )
+                SettingDivider()
+                SettingRow(
+                    title = "Share log file",
+                    subtitle = "Send nullflow.log for debugging"
+                ) {
+                    scope.launch {
+                        try {
+                            val file = AppLog.logFile()
+                            if (file == null || !file.exists() || file.length() == 0L) {
+                                AppLog.w("Settings: no log file to share (enable file logging first)")
+                                return@launch
+                            }
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file
+                            )
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share NullFlow log"))
+                            AppLog.d("Settings: log share started (${file.length()} bytes)")
+                        } catch (e: Exception) {
+                            AppLog.e("Settings: log share FAILED", e)
+                        }
+                    }
+                }
+            }
+
             // ---- PREFERENCES section ----
             SectionHeader("PREFERENCES")
             SettingCard {

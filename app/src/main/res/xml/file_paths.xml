@@ -9,4 +9,8 @@
     <cache-path
         name="dossier"
         path="." />
+    <!-- Debug log file (nullflow.log) lives in external-files-dir. -->
+    <external-files-path
+        name="logs"
+        path="." />
 </paths>

@@ -188,16 +188,42 @@ fun AppPickerSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 shape = RoundedCornerShape(16.dp),
+                // Focus state: NO bright cyan border (it competed with the
+                // SHIELDED action buttons). Instead the container lightens
+                // slightly and only the cursor keeps the cyan accent.
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
-                    focusedBorderColor = AccentCyan,
+                    focusedBorderColor = Color(0xFF3A4150),
                     unfocusedBorderColor = BorderUnselected,
                     cursorColor = AccentCyan,
-                    focusedContainerColor = GlassSurface,
+                    focusedContainerColor = Color(0xFF1A2029),
                     unfocusedContainerColor = GlassSurface
                 )
             )
+
+            // ---- Cached-content note (sets expectations) ----
+            // Blocked apps can't load NEW data, but they may still show old
+            // offline/cached content (e.g. Instagram's cached feed). This note
+            // prevents users from thinking the shield "failed" when they scroll
+            // through stale posts.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 12.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFFFB300).copy(alpha = 0.08f))
+                    .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "Note: Blocked apps may still show old cached content, but cannot load new data.",
+                    color = Color(0xFFFFB300).copy(alpha = 0.9f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            }
 
             // ---- Section label ----
             Text(
