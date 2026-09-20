@@ -16,6 +16,7 @@ NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6).
 | Feature | Description |
 |---------|-------------|
 | Reactor Core | Hero toggle with live intercept heat - color and pulse driven by real-time blocking activity |
+| Tactical Pass (BETA) | 2-minute network leash - temporarily pause the shield without ending your session |
 | Focus modes | Create multiple profiles (e.g. "Deep Work", "No Social") |
 | App picker | Search and select which apps to silence per mode |
 | Quick Settings tile | Toggle the shield from the notification shade (live timer + intercept count) |
@@ -31,7 +32,7 @@ NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6).
 ### From GitHub Releases
 
 1. Go to [Releases](https://github.com/codezmr/nullflow/releases)
-2. Download `NullFlow-v1.0.0.apk`
+2. Download `NullFlow-v1.1.0.apk`
 3. Install on your device (enable "Install unknown apps" for your browser)
 4. Open the app, complete the 3-step onboarding (grant the VPN permission when prompted)
 5. Add the "NullFlow" tile to your Quick Settings panel
