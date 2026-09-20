@@ -210,7 +210,13 @@ fun MainScreen(
         }
     }
 
-    var showStats by remember { mutableStateOf(false) }
+    var showStats by remember {
+        // Auto-expand if the user arrived via the notification HUD (they came
+        // for the details). One-shot: the flag is reset after being read.
+        mutableStateOf(com.codezmr.nullflow.vpn.FocusVpnService.pendingStatsExpand).also {
+            com.codezmr.nullflow.vpn.FocusVpnService.pendingStatsExpand = false
+        }
+    }
     val statsExpanded by animateFloatAsState(
         targetValue = if (showStats) 1f else 0f,
         animationSpec = tween(300, easing = FastOutSlowInEasing),

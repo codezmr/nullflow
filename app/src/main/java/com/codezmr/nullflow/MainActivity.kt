@@ -54,6 +54,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // If the user opened the app from the focus-session notification HUD,
+        // flag the dashboard to auto-expand Stats & History (they came for the
+        // details). One-shot: consumed by MainScreen on first composition.
+        if (intent?.getBooleanExtra(FocusVpnService.EXTRA_OPEN_STATS, false) == true) {
+            FocusVpnService.pendingStatsExpand = true
+            AppLog.d("opened from notification → pendingStatsExpand=true")
+        }
+
         val dao = FocusDatabase.get(this).focusDao()
 
         // Reconcile stale state: if the app was killed while the shield was ON,

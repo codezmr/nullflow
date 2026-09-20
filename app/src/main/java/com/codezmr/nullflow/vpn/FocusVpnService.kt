@@ -62,6 +62,13 @@ class FocusVpnService : VpnService() {
         const val ACTION_REFRESH_RULES = "com.codezmr.nullflow.action.REFRESH_RULES"
         const val EXTRA_PROFILE_ID = "profile_id"
 
+        /**
+         * Extra on the notification content intent: when true, the dashboard
+         * should auto-expand the Stats & History panel (the user tapped the
+         * HUD to see details).
+         */
+        const val EXTRA_OPEN_STATS = "open_stats"
+
         private const val CHANNEL_ID = "focus_session"
         private const val NOTIF_ID = 42
 
@@ -99,6 +106,15 @@ class FocusVpnService : VpnService() {
 
         /** Observed by the dashboard hero core (and any future surface). */
         val heatState: kotlinx.coroutines.flow.StateFlow<HeatState> = _heatState
+
+        /**
+         * One-shot flag: when the user taps the notification HUD (which opens
+         * the dashboard), the dashboard should auto-expand the Stats & History
+         * panel so they land on the details they came for. Set to true by the
+         * notification content intent, consumed (and reset) by MainScreen.
+         */
+        @Volatile
+        var pendingStatsExpand: Boolean = false
     }
 
     private var interfaceFd: ParcelFileDescriptor? = null
@@ -120,6 +136,14 @@ class FocusVpnService : VpnService() {
      */
     @Volatile
     private var blockedPackages: List<String> = emptyList()
+
+    /**
+     * Display name of the active mode for the CURRENT session (shown in the
+     * notification HUD). Set in [readBlockedApps]. Defaults to "Focus" when
+     * unknown so the HUD never shows a blank title.
+     */
+    @Volatile
+    private var profileName: String = "Focus"
 
     /** Round-robin cursor for deflected-ping attribution (thread-safe). */
     private val attributionCursor = AtomicInteger(0)
@@ -641,6 +665,8 @@ class FocusVpnService : VpnService() {
         }
         val apps = runBlocking { dao.getBlockedApps(profile.id) }
         AppLog.d("readBlockedApps: profile='${profile.name}' (id=${profile.id}) → ${apps.size} apps")
+        // Capture the mode name for the notification HUD.
+        profileName = profile.name.ifBlank { "Focus" }
         // (package names, Room IDs) — same order, so the reader can index both
         // with the same round-robin cursor.
         return apps.map { it.packageName } to apps.map { it.id }
@@ -668,11 +694,11 @@ class FocusVpnService : VpnService() {
         val secs = (elapsed / 1000) % 60
         val timer = String.format("%02d:%02d", mins, secs)
         val pings = deflectedPings.get()
-        val pingsText = "$pings Distraction${if (pings == 1) "" else "s"} Intercepted"
+        val modeName = profileName
 
         val contentIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java),
+            Intent(this, MainActivity::class.java).putExtra(EXTRA_OPEN_STATS, true),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         // Distinct request code (2) so this never coalesces with the toggle's
@@ -684,21 +710,24 @@ class FocusVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // ---- Custom "Distractions Intercepted" HUD (RemoteViews) ----
+        // ---- Custom Focus Session HUD (RemoteViews) ----
         val views = RemoteViews(packageName, R.layout.notification_focus_hud)
+        views.setTextViewText(R.id.tv_title, modeName)
         views.setTextViewText(R.id.tv_timer, timer)
-        views.setTextViewText(R.id.tv_pings, pingsText)
-        // Tapping the HUD body opens the app.
+        views.setTextViewText(R.id.tv_pings, "$pings")
+        // Tapping the HUD body (title / timer / count / details hint) opens the
+        // app dashboard where the user sees full stats.
         views.setOnClickPendingIntent(R.id.tv_title, contentIntent)
         views.setOnClickPendingIntent(R.id.tv_timer, contentIntent)
         views.setOnClickPendingIntent(R.id.tv_pings, contentIntent)
-        // The "End" button stops the shield.
+        views.setOnClickPendingIntent(R.id.tv_details_hint, contentIntent)
+        // The "End Session" button stops the shield.
         views.setOnClickPendingIntent(R.id.btn_end_session, stopIntent)
 
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shield_hud)
-            .setContentTitle(getString(R.string.vpn_service_label))
-            .setContentText(pingsText) // fallback text for OEMs that ignore RemoteViews
+            .setContentTitle(modeName)
+            .setContentText("$pings blocked · $timer") // fallback for OEMs that ignore RemoteViews
             .setContentIntent(contentIntent)
             .setCustomContentView(views)
             .setCustomBigContentView(views)
@@ -706,7 +735,7 @@ class FocusVpnService : VpnService() {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
-        AppLog.d("buildNotification: HUD timer='$timer' pings='$pingsText' ongoing=true")
+        AppLog.d("buildNotification: HUD mode='$modeName' timer='$timer' pings='$pings' ongoing=true")
         return notification
     }
 
