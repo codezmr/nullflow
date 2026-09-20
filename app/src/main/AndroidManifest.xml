@@ -58,7 +58,7 @@
              is the system permission Android checks before showing the tile. -->
         <service
             android:name=".tile.FocusTileService"
-            android:label="GhostShield"
+            android:label="@string/app_name"
             android:icon="@drawable/ic_hero_toggle"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">

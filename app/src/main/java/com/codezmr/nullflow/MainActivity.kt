@@ -281,7 +281,7 @@ class MainActivity : ComponentActivity() {
         try {
             val sbm = getSystemService(StatusBarManager::class.java)
             val tileComponent = ComponentName(this, com.codezmr.nullflow.tile.FocusTileService::class.java)
-            val label = "GhostShield"
+            val label = getString(R.string.app_name)
             val icon = Icon.createWithResource(this, R.drawable.ic_hero_toggle)
             // Main-thread executor (the callback must run on the main thread).
             // Dependency-free: a Handler on the main looper implements Executor.
