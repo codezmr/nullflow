@@ -78,6 +78,16 @@ class Settings private constructor(context: Context) {
         get() = prefs.getBoolean(KEY_FILE_LOG, true)
         set(value) { prefs.edit().putBoolean(KEY_FILE_LOG, value).apply() }
 
+    // ---- OEM kill warning ----
+    // Set to true when we detect the OS killed the shield mid-session. Drives
+    // the persistent red warning card on the dashboard. Deliberately NOT
+    // derived from the last session's aborted_by_system flag — that would keep
+    // the card stuck on screen until the user completes a new session. The
+    // user clears it by tapping "Fix Settings" or "Dismiss".
+    var showOemKillWarning: Boolean
+        get() = prefs.getBoolean(KEY_OEM_KILL_WARNING, false)
+        set(value) { prefs.edit().putBoolean(KEY_OEM_KILL_WARNING, value).apply() }
+
     companion object {
         private const val KEY_ONBOARDED = "has_onboarded"
         private const val KEY_DEFAULT_PROFILE = "default_profile_id"
@@ -93,6 +103,7 @@ class Settings private constructor(context: Context) {
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_VERBOSE_LOG = "verbose_logging"
         private const val KEY_FILE_LOG = "file_logging_enabled"
+        private const val KEY_OEM_KILL_WARNING = "show_oem_kill_warning"
 
         @Volatile
         private var INSTANCE: Settings? = null

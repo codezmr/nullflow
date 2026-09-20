@@ -81,6 +81,9 @@ class MainActivity : ComponentActivity() {
                     dao.setActive(running.profileId, false)
                     AppLog.w("Reconciled stale session ${running.id} (service not running on app start) → aborted_by_system")
                     com.codezmr.nullflow.data.SystemHealth.postShieldKilledNotification(this@MainActivity)
+                    // Flag the dashboard to show the OEM kill warning card.
+                    // (Not derived from the session reason — see Settings.kt.)
+                    Settings.get(this@MainActivity).showOemKillWarning = true
                 }
             }
         }

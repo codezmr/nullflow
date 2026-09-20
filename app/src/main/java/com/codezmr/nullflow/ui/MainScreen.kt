@@ -65,8 +65,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -105,6 +107,17 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     var showNoAppsWarning by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+
+    // OEM kill warning: shown when the OS killed the shield mid-session.
+    // Backed by a Settings flag (set in MainActivity on reconciliation).
+    // Tapping "Fix Settings" or "Dismiss" clears it.
+    var showOemKillWarning by remember {
+        mutableStateOf(com.codezmr.nullflow.data.Settings.get(context).showOemKillWarning)
+    }
+    fun clearOemKillWarning() {
+        showOemKillWarning = false
+        com.codezmr.nullflow.data.Settings.get(context).showOemKillWarning = false
+    }
 
     // ---- State from Room ----
     val profiles by dao.observeProfiles().collectAsState(initial = emptyList())
@@ -316,6 +329,19 @@ fun MainScreen(
                     fontWeight = FontWeight.Medium,
                     color = if (isActive) accentColorFromSettings(settings.accentColor) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
+
+                // ---- OEM kill warning card (persistent, below the hero) ----
+                if (showOemKillWarning) {
+                    Spacer(Modifier.height(20.dp))
+                    OemKillWarningCard(
+                        onFix = {
+                            com.codezmr.nullflow.data.OemSettingsHelper
+                                .navigateToAutoStartOrBattery(context)
+                            clearOemKillWarning()
+                        },
+                        onDismiss = { clearOemKillWarning() }
+                    )
+                }
 
                 Spacer(Modifier.height(28.dp))
 
@@ -1538,5 +1564,114 @@ private fun SessionHistory(
             }
             Spacer(Modifier.height(6.dp))
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OEM Kill Warning Card
+// ---------------------------------------------------------------------------
+
+/**
+ * Persistent red warning shown when the OS killed the shield mid-session.
+ * Only appears AFTER the phone has actually broken the app (proving the fix
+ * is necessary), not during onboarding. "Fix Settings" routes to the OEM's
+ * autostart/battery menu; "Dismiss" (×) clears the card.
+ */
+@Composable
+private fun OemKillWarningCard(
+    onFix: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val manufacturer = android.os.Build.MANUFACTURER
+        .replaceFirstChar { it.uppercase() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF2A1215))
+            .border(1.dp, Color(0xFFB3261E), RoundedCornerShape(16.dp))
+            .padding(16.dp)
+    ) {
+        // Title row: warning icon + title + dismiss (×)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                WarningTriangleIcon()
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = "NullFlow was killed by your phone.",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFFFB4AB)
+                )
+            }
+            // Dismiss (×)
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onDismiss)
+                    .background(Color.White.copy(alpha = 0.06f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "×",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.5f)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Text(
+            text = "$manufacturer aggressively kills background apps to save battery. To fix this, enable AutoStart for NullFlow.",
+            fontSize = 13.sp,
+            color = Color.White.copy(alpha = 0.7f),
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        // Fix Settings button
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onFix)
+                .background(Color(0xFFB3261E))
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Fix Settings",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+/** Small warning-triangle icon drawn with Canvas (no emoji, no vector asset). */
+@Composable
+private fun WarningTriangleIcon() {
+    val density = LocalDensity.current
+    val stroke = with(density) { 2.dp.toPx() }
+    val c = Color(0xFFFFB4AB)
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        // Triangle outline
+        drawLine(c, Offset(w * 0.5f, h * 0.12f), Offset(w * 0.9f, h * 0.85f), stroke, StrokeCap.Round)
+        drawLine(c, Offset(w * 0.9f, h * 0.85f), Offset(w * 0.1f, h * 0.85f), stroke, StrokeCap.Round)
+        drawLine(c, Offset(w * 0.1f, h * 0.85f), Offset(w * 0.5f, h * 0.12f), stroke, StrokeCap.Round)
+        // Exclamation mark
+        drawLine(c, Offset(w * 0.5f, h * 0.4f), Offset(w * 0.5f, h * 0.62f), stroke, StrokeCap.Round)
+        drawCircle(c, radius = stroke * 0.7f, center = Offset(w * 0.5f, h * 0.74f))
     }
 }
