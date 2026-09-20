@@ -60,7 +60,12 @@ class FocusVpnService : VpnService() {
         // Quick Settings tile actions.
         const val ACTION_STOP_SHIELD = "com.codezmr.nullflow.action.STOP_SHIELD"
         const val ACTION_REFRESH_RULES = "com.codezmr.nullflow.action.REFRESH_RULES"
+        // Tactical Pass: temporary 2-minute network leash.
+        const val ACTION_EMERGENCY_PASS = "com.codezmr.nullflow.action.EMERGENCY_PASS"
         const val EXTRA_PROFILE_ID = "profile_id"
+
+        /** Duration of the Tactical Pass in seconds. */
+        const val EMERGENCY_PASS_SECONDS = 120
 
         /**
          * Extra on the notification content intent: when true, the dashboard
@@ -102,6 +107,11 @@ class FocusVpnService : VpnService() {
             Intent(context, FocusVpnService::class.java)
                 .setAction(ACTION_REFRESH_RULES)
 
+        /** Build the ACTION_EMERGENCY_PASS intent (Tactical Pass). */
+        fun emergencyPassIntent(context: Context): Intent =
+            Intent(context, FocusVpnService::class.java)
+                .setAction(ACTION_EMERGENCY_PASS)
+
         private val _heatState = kotlinx.coroutines.flow.MutableStateFlow(HeatState(0, 0f))
 
         /** Observed by the dashboard hero core (and any future surface). */
@@ -114,6 +124,18 @@ class FocusVpnService : VpnService() {
          */
         private val _sessionStart = kotlinx.coroutines.flow.MutableStateFlow(0L)
         val sessionStart: kotlinx.coroutines.flow.StateFlow<Long> = _sessionStart
+
+        /**
+         * Remaining seconds in the Tactical Pass (0 when not active).
+         * Observed by the notification HUD to show the countdown.
+         */
+        private val _passRemaining = kotlinx.coroutines.flow.MutableStateFlow(0)
+        val passRemaining: kotlinx.coroutines.flow.StateFlow<Int> = _passRemaining
+
+        /** True while the Tactical Pass is active (tunnel closed, countdown running). */
+        @Volatile
+        var isPassActive: Boolean = false
+            private set
 
         /**
          * One-shot flag: when the user taps the notification HUD (which opens
@@ -322,6 +344,12 @@ class FocusVpnService : VpnService() {
                 // sends this while the shield is ON).
                 AppLog.d("ACTION_REFRESH_RULES received → hot-swap tunnel (startId=$startId)")
                 refreshRules()
+                return START_NOT_STICKY
+            }
+            ACTION_EMERGENCY_PASS -> {
+                // Tactical Pass: temporarily close the tunnel for 2 minutes.
+                AppLog.d("ACTION_EMERGENCY_PASS received → starting 2-min pass (startId=$startId)")
+                handleEmergencyPass()
                 return START_NOT_STICKY
             }
             // A NULL intent means the system is re-delivering after the process
@@ -656,6 +684,101 @@ class FocusVpnService : VpnService() {
     }
 
     /**
+     * Tactical Pass: temporarily close the tunnel for [EMERGENCY_PASS_SECONDS]
+     * seconds, giving the user a "network leash" to handle one urgent errand
+     * without ending the entire focus session.
+     *
+     * - Closes the tunnel fd (restores normal network routing).
+     * - Starts a 120s countdown (StateFlow observed by the notification HUD).
+     * - At 0:00, re-establishes the tunnel (snap back).
+     * - Session timer, heat window, and intercept counter stay alive.
+     * - The packet reader is suspended (no fd to read from).
+     */
+    private fun handleEmergencyPass() {
+        if (!isShieldRunning) {
+            AppLog.w("handleEmergencyPass: shield not running - no-op")
+            return
+        }
+        if (isPassActive) {
+            AppLog.w("handleEmergencyPass: pass already active - no-op")
+            return
+        }
+
+        // 1) Close the tunnel fd (restores normal network routing).
+        try {
+            interfaceFd?.close()
+            AppLog.d("emergencyPass: tunnel fd closed - network restored")
+        } catch (e: Exception) {
+            AppLog.e("emergencyPass: closing fd failed", e)
+        }
+        interfaceFd = null
+
+        // 2) Stop the packet reader (no fd to read from).
+        readerScope?.cancel()
+        readerScope = null
+
+        // 3) Mark the pass as active and start the countdown.
+        isPassActive = true
+        _passRemaining.value = EMERGENCY_PASS_SECONDS
+        AppLog.d("emergencyPass: STARTED - ${EMERGENCY_PASS_SECONDS}s leash active")
+
+        // 4) Launch the countdown coroutine.
+        serviceScope.launch {
+            var remaining = EMERGENCY_PASS_SECONDS
+            while (remaining > 0 && shouldRun && isPassActive) {
+                delay(1_000)
+                remaining--
+                _passRemaining.value = remaining
+                // Update the notification with the countdown.
+                try {
+                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                        .notify(NOTIF_ID, buildNotification())
+                } catch (e: Exception) {
+                    AppLog.e("emergencyPass: notification update failed", e)
+                }
+            }
+
+            // 5) Snap back: re-establish the tunnel.
+            if (shouldRun && isPassActive) {
+                AppLog.d("emergencyPass: countdown complete - snapping back")
+                snapBack()
+            }
+        }
+    }
+
+    /**
+     * Re-establish the tunnel after the Tactical Pass countdown expires.
+     * The VpnService is still running and holds the system's active VPN slot,
+     * so no re-authorization is needed.
+     */
+    private fun snapBack() {
+        serviceScope.launch {
+            // Re-establish the tunnel with the same blocked apps.
+            val fd = establishTunnel(blockedPackages)
+            if (fd == null) {
+                AppLog.e("snapBack: re-establish FAILED → tearing down")
+                isPassActive = false
+                _passRemaining.value = 0
+                teardown()
+                return@launch
+            }
+            interfaceFd = fd
+            isPassActive = false
+            _passRemaining.value = 0
+            // Restart the packet reader against the new fd.
+            startPacketReader(fd)
+            AppLog.d("snapBack: tunnel re-established - shield active again. fd=$fd")
+            // Update the notification to show the normal HUD.
+            try {
+                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                    .notify(NOTIF_ID, buildNotification())
+            } catch (e: Exception) {
+                AppLog.e("snapBack: notification update failed", e)
+            }
+        }
+    }
+
+    /**
      * Read a profile's blocked apps. Returns a pair of (package names, Room IDs)
      * - the names build the tunnel, the IDs drive round-robin deflected-ping
      * attribution.
@@ -706,6 +829,7 @@ class FocusVpnService : VpnService() {
         val timer = String.format("%02d:%02d", mins, secs)
         val pings = deflectedPings.get()
         val modeName = profileName
+        val passRemaining = _passRemaining.value
 
         val contentIntent = PendingIntent.getActivity(
             this, 0,
@@ -723,22 +847,41 @@ class FocusVpnService : VpnService() {
 
         // ---- Custom Focus Session HUD (RemoteViews) ----
         val views = RemoteViews(packageName, R.layout.notification_focus_hud)
-        views.setTextViewText(R.id.tv_title, modeName)
-        views.setTextViewText(R.id.tv_timer, timer)
-        views.setTextViewText(R.id.tv_pings, "$pings")
+
+        if (isPassActive && passRemaining > 0) {
+            // Tactical Pass active: show countdown.
+            val passMins = passRemaining / 60
+            val passSecs = passRemaining % 60
+            val passTimer = String.format("%02d:%02d", passMins, passSecs)
+            views.setTextViewText(R.id.tv_title, "$modeName (Pass)")
+            views.setTextViewText(R.id.tv_timer, "Resumes in $passTimer")
+            views.setTextViewText(R.id.tv_pings, "$pings blocked")
+        } else {
+            // Normal mode: show session timer.
+            views.setTextViewText(R.id.tv_title, modeName)
+            views.setTextViewText(R.id.tv_timer, timer)
+            views.setTextViewText(R.id.tv_pings, "$pings")
+        }
+
         // Tapping the HUD body (title / timer / count / details hint) opens the
         // app dashboard where the user sees full stats.
         views.setOnClickPendingIntent(R.id.tv_title, contentIntent)
         views.setOnClickPendingIntent(R.id.tv_timer, contentIntent)
         views.setOnClickPendingIntent(R.id.tv_pings, contentIntent)
         views.setOnClickPendingIntent(R.id.tv_details_hint, contentIntent)
-        // The "End Session" button stops the shield.
+        // The "End Session" button stops the shield (works during pass too).
         views.setOnClickPendingIntent(R.id.btn_end_session, stopIntent)
+
+        val contentText = if (isPassActive && passRemaining > 0) {
+            "Pass active · resumes in ${passRemaining / 60}:${String.format("%02d", passRemaining % 60)}"
+        } else {
+            "$pings blocked · $timer"
+        }
 
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shield_hud)
             .setContentTitle(modeName)
-            .setContentText("$pings blocked · $timer") // fallback for OEMs that ignore RemoteViews
+            .setContentText(contentText)
             .setContentIntent(contentIntent)
             .setCustomContentView(views)
             .setCustomBigContentView(views)
@@ -746,7 +889,7 @@ class FocusVpnService : VpnService() {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
-        AppLog.d("buildNotification: HUD mode='$modeName' timer='$timer' pings='$pings' ongoing=true")
+        AppLog.d("buildNotification: HUD mode='$modeName' timer='$timer' pings='$pings' pass=$passRemaining ongoing=true")
         return notification
     }
 
@@ -759,28 +902,37 @@ class FocusVpnService : VpnService() {
         serviceScope.launch {
             while (shouldRun) {
                 delay(1_000)
-                if (shouldRun && interfaceFd != null) {
-                    // Evict heat-window entries older than the window and
-                    // publish the live heat level (0..1).
-                    val cutoff = System.currentTimeMillis() - HEAT_WINDOW_MS
-                    val windowSize: Int
-                    synchronized(heatLock) {
-                        while (heatWindow.isNotEmpty() && heatWindow.first() < cutoff) {
-                            heatWindow.removeFirst()
-                        }
-                        windowSize = heatWindow.size
+                if (shouldRun) {
+                    // During Tactical Pass: skip heat updates (no tunnel = no packets),
+                    // but still update the notification (the pass countdown handles
+                    // its own notification updates, so we skip here too).
+                    if (isPassActive) {
+                        continue
                     }
-                    // Saturation curve: 15 intercepts in the last minute = full
-                    // heat. sqrt keeps low counts visibly cool and high counts
-                    // from slamming to red on a single burst.
-                    val heat = (kotlin.math.sqrt(windowSize.toFloat() / 15f)).coerceIn(0f, 1f)
-                    _heatState.value = HeatState(deflectedPings.get(), heat)
 
-                    try {
-                        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                            .notify(NOTIF_ID, buildNotification())
-                    } catch (e: Exception) {
-                        AppLog.e("timer notification refresh failed", e)
+                    if (interfaceFd != null) {
+                        // Evict heat-window entries older than the window and
+                        // publish the live heat level (0..1).
+                        val cutoff = System.currentTimeMillis() - HEAT_WINDOW_MS
+                        val windowSize: Int
+                        synchronized(heatLock) {
+                            while (heatWindow.isNotEmpty() && heatWindow.first() < cutoff) {
+                                heatWindow.removeFirst()
+                            }
+                            windowSize = heatWindow.size
+                        }
+                        // Saturation curve: 15 intercepts in the last minute = full
+                        // heat. sqrt keeps low counts visibly cool and high counts
+                        // from slamming to red on a single burst.
+                        val heat = (kotlin.math.sqrt(windowSize.toFloat() / 15f)).coerceIn(0f, 1f)
+                        _heatState.value = HeatState(deflectedPings.get(), heat)
+
+                        try {
+                            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                                .notify(NOTIF_ID, buildNotification())
+                        } catch (e: Exception) {
+                            AppLog.e("timer notification refresh failed", e)
+                        }
                     }
                 }
             }

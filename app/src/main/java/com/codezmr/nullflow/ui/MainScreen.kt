@@ -341,6 +341,56 @@ fun MainScreen(
                     color = if (isActive) accentColorFromSettings(settings.accentColor) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
 
+                // ---- Tactical Pass button (BETA) - only when shield is ON ----
+                if (isActive) {
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1A1F2E))
+                            .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(12.dp))
+                            .clickable {
+                                Haptics.tick(context)
+                                context.startService(
+                                    com.codezmr.nullflow.vpn.FocusVpnService.emergencyPassIntent(context)
+                                )
+                                AppLog.d("Emergency Pass tapped - starting 2-min leash")
+                            }
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Emergency Pass",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFFE6EAF0)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFFF9500).copy(alpha = 0.15f))
+                                    .border(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = "BETA",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF9500)
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "(2m)",
+                                fontSize = 12.sp,
+                                color = Color(0xFF808080)
+                            )
+                        }
+                    }
+                }
+
                 // ---- OEM kill warning card (persistent, below the hero) ----
                 if (showOemKillWarning) {
                     Spacer(Modifier.height(20.dp))
