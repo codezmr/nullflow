@@ -182,17 +182,15 @@ fun OnboardingScreen(
             .collect { currentPage = it }
     }
 
-    // ---- Swipe guard: block swiping to page 2 (Enhancements) until the VPN
-    // permission is granted. The user must tap "Enable Local Shield" and grant
-    // it — swiping left/right cannot bypass the mandatory permission gate.
-    LaunchedEffect(pagerState) {
-        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }
-            .collect { page ->
-                if (page >= 2 && !hasVpnPerm) {
-                    pagerState.scrollToPage(1)
-                }
-            }
-    }
+    // ---- Swipe guard: HARD block. While the user is on page 1 (Permissions)
+    // and the VPN permission is NOT granted, disable all pager swiping. The
+    // user must tap "Enable Local Shield" and grant it to proceed — swiping
+    // left/right cannot bypass the mandatory permission gate.
+    //
+    // (A snap-back via scrollToPage is NOT enough: the swipe gesture completes
+    // the page change before the guard fires, so the user briefly lands on
+    // page 2. userScrollEnabled=false is a true hard block.)
+    val userScrollEnabled = !(currentPage == 1 && !hasVpnPerm)
 
     Box(
         modifier = Modifier
@@ -203,6 +201,7 @@ fun OnboardingScreen(
 
         HorizontalPager(
             state = pagerState,
+            userScrollEnabled = userScrollEnabled,
             modifier = Modifier.fillMaxSize()
         ) { page ->
             when (page) {
