@@ -227,7 +227,7 @@ class FocusVpnService : VpnService() {
                 val dao = FocusDatabase.get(this@FocusVpnService).focusDao()
                 val running = dao.getRunningSession()
                 if (running != null) {
-                    dao.endSession(running.id, System.currentTimeMillis())
+                    dao.endSession(running.id, System.currentTimeMillis(), "completed")
                     dao.setActive(running.profileId, false)
                     AppLog.d("clearRoomSession: session ${running.id} ended, profile ${running.profileId} deactivated")
                 } else {

@@ -45,13 +45,19 @@ class MainActivity : ComponentActivity() {
         // the service died with it (isShieldRunning == false on fresh process),
         // but Room still has a running session + active profile. Clear it so the
         // toggle isn't stuck showing "ON".
+        //
+        // "Killed by OS" detection: a running session in Room + a dead service
+        // means the OS ended the VPN mid-session (battery optimization / memory
+        // pressure). We mark the session aborted_by_system and post a
+        // high-priority notification so the user knows the shield is OFF.
         if (!FocusVpnService.isShieldRunning) {
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 val running = dao.getRunningSession()
                 if (running != null) {
-                    dao.endSession(running.id, System.currentTimeMillis())
+                    dao.endSession(running.id, System.currentTimeMillis(), "aborted_by_system")
                     dao.setActive(running.profileId, false)
-                    AppLog.w("Reconciled stale session ${running.id} (service not running on app start)")
+                    AppLog.w("Reconciled stale session ${running.id} (service not running on app start) → aborted_by_system")
+                    com.codezmr.nullflow.data.SystemHealth.postShieldKilledNotification(this@MainActivity)
                 }
             }
         }

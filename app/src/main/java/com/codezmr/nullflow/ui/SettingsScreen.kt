@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.Settings
+import com.codezmr.nullflow.data.SystemHealth
 import kotlinx.coroutines.launch
 
 private val SfgBg = Color(0xFF0A0C10)
@@ -77,6 +78,22 @@ fun SettingsScreen(
     // Clear confirmation
     var showClearConfirm by remember { mutableStateOf(false) }
     var clearTarget by remember { mutableStateOf("") }
+
+    // System Health: live battery-optimization status. Re-checked on every
+    // resume (the user may have just flipped it in the system settings screen).
+    var batteryExempt by remember {
+        mutableStateOf(SystemHealth.isIgnoringBatteryOptimizations(context))
+    }
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                batteryExempt = SystemHealth.isIgnoringBatteryOptimizations(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val version = remember {
         try {
@@ -184,6 +201,24 @@ fun SettingsScreen(
                         refresh()
                     }
                 )
+            }
+
+            // ---- SYSTEM HEALTH section ----
+            SectionHeader("SYSTEM HEALTH")
+            SettingCard {
+                SettingRow(
+                    title = "Battery protection",
+                    subtitle = if (batteryExempt)
+                        "Shield is protected from system sleep"
+                    else
+                        "Tap to allow NullFlow to ignore battery limits",
+                    beta = !batteryExempt
+                ) {
+                    if (!batteryExempt) {
+                        context.startActivity(SystemHealth.batterySettingsIntent(context))
+                        // Status re-checks on ON_RESUME (lifecycle observer above).
+                    }
+                }
             }
 
             // ---- SCHEDULE section ----
