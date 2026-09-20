@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -177,11 +178,10 @@ class MainActivity : ComponentActivity() {
                     )
 
                     if (showModeManager) {
-                        // Bottom-anchored panel: dimmed scrim + sheet pinned to
-                        // the bottom edge (max 80% height, top rounded corners).
-                        // The sheet content shrink-wraps, so the wrapper must
-                        // align it to BottomCenter with a real background —
-                        // otherwise it floats at the top of the screen.
+                        // Centered dialog-style panel: dimmed scrim + sheet
+                        // centered on screen (max 80% height, all corners
+                        // rounded). The sheet content shrink-wraps, so the
+                        // wrapper aligns it to Center with a real background.
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -190,10 +190,11 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.BottomCenter)
+                                    .align(Alignment.Center)
                                     .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
                                     .heightIn(max = 640.dp)
-                                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                                    .clip(RoundedCornerShape(24.dp))
                                     .clickable(enabled = false) { }
                             ) {
                                 ModeManagerSheet(
