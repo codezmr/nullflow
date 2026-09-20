@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -339,6 +344,14 @@ private fun InlineNameField(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // Auto-focus the field when it appears so the keyboard opens immediately.
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    var isFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -363,13 +376,25 @@ private fun InlineNameField(
                 onValueChange = onTextChange,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { isFocused = it.isFocused }
                     .clip(RoundedCornerShape(8.dp))
                     .background(SheetBg)
-                    .border(1.dp, SheetBorder, RoundedCornerShape(8.dp))
+                    .border(
+                        width = if (isFocused) 2.dp else 1.dp,
+                        color = if (isFocused) SheetAccent else SheetBorder,
+                        shape = RoundedCornerShape(8.dp)
+                    )
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
                 singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done)
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        if (text.isNotBlank()) onConfirm()
+                        else focusManager.clearFocus()
+                    }
+                )
             )
         }
         Spacer(Modifier.height(12.dp))
