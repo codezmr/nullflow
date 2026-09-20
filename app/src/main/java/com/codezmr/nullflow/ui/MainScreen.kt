@@ -8,7 +8,9 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -1001,6 +1003,35 @@ private fun HeroToggle(
     }
     val heat = heatAnim.value
 
+    // ---- Impact recoil: discrete spring physics, independent of heat ----
+    // When the intercept count ticks up, the core physically jolts sideways
+    // (snapTo) then wobbles back to rest via a low-damping spring. Throttled
+    // to max one shake per 500ms so a packet burst reads as a single impact,
+    // not a glitching mess. Direction alternates per hit so the core feels
+    // like it's swatting threats, not being pushed one way.
+    val scope = rememberCoroutineScope()
+    val recoilX = remember { Animatable(0f) }
+    var lastImpactTime by remember { mutableLongStateOf(0L) }
+    var impactDirection by remember { mutableIntStateOf(1) }
+    LaunchedEffect(heatState.count) {
+        if (!isActive || heatState.count == 0) return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        if (now - lastImpactTime > 500) {
+            lastImpactTime = now
+            impactDirection = -impactDirection
+            scope.launch {
+                recoilX.snapTo(12f * impactDirection)
+                recoilX.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = 0.3f,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+            }
+        }
+    }
+
     // 3-point color lerp: cyan → amber → red-orange (no grey dead zone).
     val coreColor = if (heat < 0.5f) {
         lerpColor(accent, Color(0xFFFFB300), heat * 2f)
@@ -1080,6 +1111,7 @@ private fun HeroToggle(
         Box(
             modifier = Modifier
                 .size(size)
+                .graphicsLayer { translationX = recoilX.value }
                 .shadow(
                     elevation = if (isActive) glowElevation else 12.dp,
                     shape = CircleShape,
