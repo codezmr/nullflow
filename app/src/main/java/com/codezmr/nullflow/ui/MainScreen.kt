@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -129,6 +130,9 @@ fun MainScreen(
     // ---- Focus Telemetry Console: live interception data ----
     // Top 5 most-intercepted apps (drives the donut + the threat ledger).
     val topIntercepted by dao.getInterceptionsByApp(5).collectAsState(initial = emptyList())
+    // Per-app intercept counts for ALL shielded apps (drives the "Blocked by
+    // App" detail list — how many requests each app tried and we blocked).
+    val allAppIntercepts by dao.getInterceptionsByAppAll().collectAsState(initial = emptyList())
     // Total intercepted pings across all time ("Threats Neutralized").
     val totalIntercepts by dao.getTotalIntercepts().collectAsState(initial = 0)
     // The hour of day with the most intercepts ("Peak Focus Time").
@@ -561,6 +565,7 @@ fun MainScreen(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         TelemetryConsole(
                             topIntercepted = topIntercepted,
+                            allAppIntercepts = allAppIntercepts,
                             totalIntercepts = totalIntercepts,
                             totalMs = totalMs,
                             peakHour = peakHour,
@@ -664,6 +669,7 @@ fun MainScreen(
 @Composable
 private fun TelemetryConsole(
     topIntercepted: List<AppInterceptStats>,
+    allAppIntercepts: List<AppInterceptStats>,
     totalIntercepts: Int,
     totalMs: Long,
     peakHour: PeakHourStats?,
@@ -880,6 +886,108 @@ private fun TelemetryConsole(
                     }
                 }
             }
+        }
+
+        // ---- 4. Blocked by App (per-app detail) ----
+        // How many connection attempts each shielded app made that we blocked.
+        // Shown for every app that has at least one intercept (apps with zero
+        // are omitted to keep the list focused on what actually happened).
+        val blockedApps = allAppIntercepts.filter { it.interceptCount > 0 }
+        if (blockedApps.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = "BLOCKED BY APP",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+            )
+            Spacer(Modifier.height(10.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF12151C))
+                    .border(1.dp, Color(0xFF222733), RoundedCornerShape(14.dp))
+            ) {
+                blockedApps.forEachIndexed { index, app ->
+                    BlockedAppRow(
+                        appName = app.appName,
+                        count = app.interceptCount,
+                        share = if (totalIntercepts > 0)
+                            app.interceptCount.toFloat() / totalIntercepts else 0f,
+                        isLast = index == blockedApps.lastIndex
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Per-app blocked row — name + count + a thin share bar
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun BlockedAppRow(
+    appName: String,
+    count: Int,
+    share: Float,
+    isLast: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isLast) Modifier
+                else Modifier.drawBehind {
+                    drawLine(
+                        color = Color(0xFF222733),
+                        start = Offset(12f, size.height),
+                        end = Offset(size.width - 12f, size.height),
+                        strokeWidth = 1f
+                    )
+                }
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = appName,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFFE6EAF0),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "$count",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF00E5FF)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        // Thin share bar (proportion of total blocks this app accounts for).
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color(0xFF1E2430))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(share.coerceIn(0.02f, 1f))
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFF00E5FF).copy(alpha = 0.7f))
+            )
         }
     }
 }
