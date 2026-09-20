@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.R
 import com.codezmr.nullflow.data.Settings
+import com.codezmr.nullflow.data.SystemHealth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -153,6 +154,11 @@ fun OnboardingScreen(
     var hasVpnPerm by remember {
         mutableStateOf(VpnService.prepare(context) == null)
     }
+    // Battery-optimization exemption (keeps the shield alive overnight).
+    // OPTIONAL — never blocks the gatekeeper, but strongly recommended.
+    var batteryExempt by remember {
+        mutableStateOf(SystemHealth.isIgnoringBatteryOptimizations(context))
+    }
 
     // ---- Launchers (sequential — one at a time) ----
     val notifLauncher = rememberLauncherForActivityResult(
@@ -169,6 +175,16 @@ fun OnboardingScreen(
             hasVpnPerm = true
             Haptics.engage(context)
         }
+    }
+
+    // Battery-optimization settings screen (no permission prompt — the user
+    // flips the switch themselves in the system UI). Re-check on return.
+    val batteryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val now = SystemHealth.isIgnoringBatteryOptimizations(context)
+        if (now && !batteryExempt) Haptics.engage(context)
+        batteryExempt = now
     }
 
     val allGranted = hasNotificationPerm && hasVpnPerm
@@ -202,6 +218,13 @@ fun OnboardingScreen(
                 if (vpnReady != hasVpnPerm) {
                     hasVpnPerm = vpnReady
                     if (vpnReady) Haptics.engage(context)
+                }
+                // Re-check battery-optimization exemption (user may have just
+                // flipped it in the system settings screen).
+                val batteryNow = SystemHealth.isIgnoringBatteryOptimizations(context)
+                if (batteryNow != batteryExempt) {
+                    batteryExempt = batteryNow
+                    if (batteryNow) Haptics.engage(context)
                 }
             }
         }
@@ -369,6 +392,20 @@ fun OnboardingScreen(
             }
 
             Spacer(Modifier.height(34.dp))
+
+            // ---- Recommended: keep the shield alive (battery optimization) ----
+            // Routed through the system settings screen (Play-policy safe —
+            // no direct exemption request). Never blocks the gatekeeper.
+            BatteryKeepAliveSection(
+                exempt = batteryExempt,
+                onClick = {
+                    if (batteryExempt) return@BatteryKeepAliveSection
+                    Haptics.tick(context)
+                    batteryLauncher.launch(SystemHealth.batterySettingsIntent(context))
+                }
+            )
+
+            Spacer(Modifier.height(28.dp))
 
             // ---- Optional: pin the GhostShield Quick Settings tile ----
             // Highly recommended (1-tap access) but never blocks onboarding.
@@ -1110,6 +1147,90 @@ private fun SwipeToArmSlider(
                 fontWeight = FontWeight.Bold,
                 color = if (unlocked) Color(0xFF0A0C10) else StarkWhite.copy(alpha = 0.4f)
             )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Battery keep-alive section (recommended, non-blocking)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Keep the Shield Alive" — routes the user to the system battery-optimization
+ * settings so the OS doesn't kill the VPN overnight.
+ *
+ *  - Not exempt: cyan outlined button, tap → system settings screen.
+ *  - Exempt: dimmed "Protected" state (re-checks live on resume).
+ *
+ * This section is RECOMMENDED — it never blocks the user from entering the app.
+ */
+@Composable
+private fun BatteryKeepAliveSection(
+    exempt: Boolean,
+    onClick: () -> Unit
+) {
+    val bg by animateColorAsState(
+        targetValue = if (exempt)
+            NeonCyan.copy(alpha = 0.10f)
+        else
+            SurfaceDark,
+        animationSpec = tween(350),
+        label = "batteryBg"
+    )
+    val border by animateColorAsState(
+        targetValue = if (exempt)
+            NeonCyan.copy(alpha = 0.4f)
+        else
+            NeonCyan,
+        animationSpec = tween(350),
+        label = "batteryBorder"
+    )
+    val text by animateColorAsState(
+        targetValue = if (exempt)
+            NeonCyan.copy(alpha = 0.5f)
+        else
+            NeonCyan,
+        animationSpec = tween(350),
+        label = "batteryText"
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Recommended — Keep the Shield Alive",
+            color = StarkWhite.copy(alpha = 0.55f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(bottom = 10.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .border(1.dp, border, RoundedCornerShape(16.dp))
+                .background(bg)
+                .clickable(enabled = !exempt, onClick = onClick)
+                .height(56.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (exempt) "✓" else "🔋",
+                    fontSize = 16.sp,
+                    color = text
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (exempt)
+                        "Shield protected from system sleep"
+                    else
+                        "Allow NullFlow to ignore battery limits",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = text
+                )
+            }
         }
     }
 }

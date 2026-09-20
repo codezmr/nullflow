@@ -13,5 +13,12 @@ data class FocusSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val profileId: Long,
     val startTime: Long,
-    val endTime: Long? = null
+    val endTime: Long? = null,
+    /**
+     * Why the session ended. Null while running.
+     *  - "completed"          → ran to the planned end (strict mode) or user stopped it
+     *  - "aborted_by_system"  → the OS killed the VPN service mid-session
+     *  - "aborted_by_user"    → user broke the strict-mode lock and stopped early
+     */
+    val endReason: String? = null
 )
