@@ -202,9 +202,20 @@ fun MainScreen(
             Haptics.disengage(context)
         } else {
             // Turn ON — one tap, zero popups.
-            // VpnService.prepare() was already answered during onboarding,
-            // so the tunnel establishes immediately.
             //
+            // HARD GATE: the VPN permission MUST be granted before we attempt
+            // to start the shield. Without it, VpnService.Builder.establish()
+            // throws and the tunnel never comes up — but the UI would already
+            // show "Shield on" (profile marked active + session inserted).
+            // So we check first and route the user to grant it.
+            val vpnReady = android.net.VpnService.prepare(context) == null
+            if (!vpnReady) {
+                AppLog.w("TOGGLE → blocked, VPN permission not granted. Routing to grant.")
+                Haptics.tick(context)
+                requestVpnPermission(context)
+                return
+            }
+
             // Profile resolution: the effective profile (active, else first
             // existing), or a brand-new default only if none exist at all.
             val profileId = effectiveProfile?.id ?: createDefaultProfile(dao)
@@ -1377,6 +1388,23 @@ private fun localMidnight(epochMs: Long): Long {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Route the user to grant the VPN permission. VpnService.prepare() shows the
+ * system "Allow NullFlow to create virtual network?" dialog. When the user
+ * grants it, the activity result returns and the user can tap the shield
+ * again. Returns immediately if already granted (prepare() == null).
+ */
+private fun requestVpnPermission(context: android.content.Context) {
+    val intent = android.net.VpnService.prepare(context) ?: return
+    try {
+        (context as? android.app.Activity)?.startActivityForResult(intent, 1001)
+            ?: context.startActivity(intent)
+        AppLog.d("requestVpnPermission: launched VpnService.prepare() dialog")
+    } catch (e: Exception) {
+        AppLog.e("requestVpnPermission FAILED", e)
+    }
+}
 
 private fun startShield(context: android.content.Context, dao: FocusDao, profileId: Long) {
     // Mark profile active + start a session, then start the service.

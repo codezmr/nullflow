@@ -72,10 +72,10 @@ class Settings private constructor(context: Context) {
         set(value) { prefs.edit().putBoolean(KEY_VERBOSE_LOG, value).apply() }
 
     // ---- Diagnostics ----
-    // File logging is ON by default (debug phase) so issues can be shared as
-    // a log file. Users can switch it off in Settings → Diagnostics.
+    // File logging is OFF by default. Users can turn it on in
+    // Settings → Diagnostics to capture a shareable log file.
     var fileLoggingEnabled: Boolean
-        get() = prefs.getBoolean(KEY_FILE_LOG, true)
+        get() = prefs.getBoolean(KEY_FILE_LOG, false)
         set(value) { prefs.edit().putBoolean(KEY_FILE_LOG, value).apply() }
 
     // ---- OEM kill warning ----
