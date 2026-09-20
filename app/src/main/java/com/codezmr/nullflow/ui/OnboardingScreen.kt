@@ -276,7 +276,7 @@ fun OnboardingScreen(
                     }
                 )
                 1 -> OnboardingActionButton(
-                    text = if (hasVpnPerm) "Continue" else "Grant VPN to continue",
+                    text = if (hasVpnPerm) "Continue" else "Enable filter to continue",
                     enabled = hasVpnPerm,
                     onClick = {
                         Haptics.engage(context)
@@ -284,7 +284,7 @@ fun OnboardingScreen(
                     }
                 )
                 2 -> OnboardingActionButton(
-                    text = "Finish Setup",
+                    text = "Commit & Finish",
                     enabled = true,
                     onClick = {
                         Haptics.engage(context)
@@ -315,7 +315,7 @@ private fun HookPage() {
         Spacer(Modifier.height(34.dp))
 
         Text(
-            text = "Silence the noise.\nKeep the connection.",
+            text = "Take back your attention.",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = StarkWhite,
@@ -338,10 +338,8 @@ private fun HookPage() {
                 .padding(horizontal = 18.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("🔒", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.width(8.dp))
             Text(
-                text = "100% local · 0 bytes leave this phone",
+                text = "Everything stays on this device. No servers, no tracking.",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = IcyBlue,
@@ -370,14 +368,14 @@ private fun PermissionsPage(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Arm the Shield",
+            text = "Lock in your focus.",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = StarkWhite
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Two permissions power the engine.",
+            text = "Two steps to make distractions impossible.",
             style = MaterialTheme.typography.bodyMedium,
             color = StarkWhite.copy(alpha = 0.5f),
             textAlign = TextAlign.Center
@@ -386,17 +384,15 @@ private fun PermissionsPage(
         Spacer(Modifier.height(30.dp))
 
         PermissionRow(
-            icon = "🔔",
-            title = "Notifications",
-            subtitle = "Required for the focus timer",
+            title = "Timer Notifications",
+            subtitle = "Track your focus progress at a glance.",
             granted = hasNotificationPerm,
             onClick = onNotificationClick
         )
         Spacer(Modifier.height(12.dp))
         PermissionRow(
-            icon = "🛡",
-            title = "Local VPN",
-            subtitle = "Required to drop app traffic",
+            title = "Local VPN Filter",
+            subtitle = "The internal tool that safely cuts off addictive apps.",
             granted = hasVpnPerm,
             onClick = onVpnClick
         )
@@ -423,14 +419,14 @@ private fun EnhancementsPage(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Seamless Focus",
+            text = "Bulletproof the system.",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = StarkWhite
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Optional — skip if you like.",
+            text = "Recommended to prevent interruptions.",
             style = MaterialTheme.typography.bodyMedium,
             color = StarkWhite.copy(alpha = 0.5f),
             textAlign = TextAlign.Center
@@ -439,17 +435,15 @@ private fun EnhancementsPage(
         Spacer(Modifier.height(30.dp))
 
         PermissionRow(
-            icon = "🔋",
-            title = "Ignore Battery Limits",
-            subtitle = "Prevents the OS from killing the shield",
+            title = "Unrestricted Battery",
+            subtitle = "Stops your phone from accidentally turning off the blocker.",
             granted = batteryExempt,
             onClick = onBatteryClick
         )
         Spacer(Modifier.height(12.dp))
         PermissionRow(
-            icon = "⚡",
-            title = "Pin to Quick Settings",
-            subtitle = "Toggle the shield instantly",
+            title = "Quick Settings Tile",
+            subtitle = "Swipe down to activate focus mode instantly.",
             granted = tileAdded,
             pending = tileRequesting,
             onClick = onTileClick
@@ -461,10 +455,9 @@ private fun EnhancementsPage(
 // Shared components
 // ---------------------------------------------------------------------------
 
-/** One permission/enhancement row: icon + title + subtitle + status. */
+/** One permission/enhancement row: status circle + title + subtitle + action. */
 @Composable
 private fun PermissionRow(
-    icon: String,
     title: String,
     subtitle: String,
     granted: Boolean,
@@ -500,7 +493,7 @@ private fun PermissionRow(
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Status circle (check when granted, icon otherwise)
+        // Status circle (check when granted, subtle ring otherwise)
         Box(
             modifier = Modifier
                 .size(30.dp)
@@ -526,7 +519,13 @@ private fun PermissionRow(
                     )
                 }
             } else {
-                Text(text = icon, fontSize = 14.sp)
+                // Subtle inner ring (clean typography, no emoji).
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, IcyBlue.copy(alpha = 0.6f), CircleShape)
+                )
             }
         }
 
