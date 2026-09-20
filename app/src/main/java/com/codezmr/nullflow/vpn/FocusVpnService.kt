@@ -108,6 +108,14 @@ class FocusVpnService : VpnService() {
         val heatState: kotlinx.coroutines.flow.StateFlow<HeatState> = _heatState
 
         /**
+         * Epoch-ms the current session started (0 when no session). Observed by
+         * the QS tile panel to show a live focus timer. Updated when a session
+         * starts and cleared on teardown.
+         */
+        private val _sessionStart = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        val sessionStart: kotlinx.coroutines.flow.StateFlow<Long> = _sessionStart
+
+        /**
          * One-shot flag: when the user taps the notification HUD (which opens
          * the dashboard), the dashboard should auto-expand the Stats & History
          * panel so they land on the details they came for. Set to true by the
@@ -226,9 +234,11 @@ class FocusVpnService : VpnService() {
         AppLog.d("teardown: stopping shield (shouldRun=$shouldRun, fd=${interfaceFd != null})")
         shouldRun = false
         isShieldRunning = false
-        // 0) Cool the reactor core + clear the heat window.
+        // 0) Cool the reactor core + clear the heat window + reset the timer.
         synchronized(heatLock) { heatWindow.clear() }
         _heatState.value = HeatState(0, 0f)
+        _sessionStart.value = 0L
+        sessionStartedAt = 0L
         // 1) Stop the timer loop + packet reader.
         serviceScope.cancel()
         readerScope?.cancel()
@@ -341,6 +351,7 @@ class FocusVpnService : VpnService() {
     private fun startShield(profileId: Long) {
         // 1) Go foreground FIRST — satisfies the 5s contract no matter what.
         sessionStartedAt = System.currentTimeMillis()
+        _sessionStart.value = sessionStartedAt
         try {
             startForeground(NOTIF_ID, buildNotification())
             AppLog.d("startForeground OK — notification posted (before tunnel)")

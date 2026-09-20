@@ -30,10 +30,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,6 +91,20 @@ fun TileFocusPanel(
     val activeProfile by dao.observeActiveProfile().collectAsState(initial = null)
     val runningSession by dao.observeRunningSession().collectAsState(initial = null)
 
+    // ---- Live session data from the VPN service (timer + intercept count) ----
+    val heatState by com.codezmr.nullflow.vpn.FocusVpnService
+        .heatState.collectAsState(initial = com.codezmr.nullflow.vpn.HeatState(0, 0f))
+    val sessionStart by com.codezmr.nullflow.vpn.FocusVpnService
+        .sessionStart.collectAsState(initial = 0L)
+    // Ticking clock (1s) so the elapsed-time display updates live.
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1_000)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+
     // Grouped: profile id → (name, isActive, list of package names).
     val grouped = remember(profileRows) {
         val map = LinkedHashMap<Long, ModeWithApps>()
@@ -100,6 +117,15 @@ fun TileFocusPanel(
 
     // Shield is ON only when there's an active profile AND a live session.
     val isShieldOn = activeProfile != null && runningSession != null
+
+    // Elapsed focus time for the live timer display.
+    val elapsedMs = if (isShieldOn && sessionStart > 0)
+        (nowMs - sessionStart).coerceAtLeast(0L) else 0L
+    val timerText = String.format(
+        "%02d:%02d",
+        elapsedMs / 60_000,
+        (elapsedMs / 1000) % 60
+    )
 
     // ---- Master switch ----
     fun onToggleShield(shouldActivate: Boolean) {
@@ -211,6 +237,54 @@ fun TileFocusPanel(
                     uncheckedTrackColor = Color(0xFF1E1E1E)
                 )
             )
+        }
+
+        // ---- Live session stats (only when the shield is on) ----
+        if (isShieldOn) {
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(PanelSelectedRow)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = timerText,
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "FOCUS TIME",
+                        color = PanelMuted,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${heatState.count}",
+                        color = PanelAccent,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "BLOCKED",
+                        color = PanelMuted,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(22.dp))
