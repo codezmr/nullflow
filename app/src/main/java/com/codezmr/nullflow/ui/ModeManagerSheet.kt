@@ -28,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,7 @@ import com.codezmr.nullflow.data.FocusDao
 import com.codezmr.nullflow.data.FocusProfile
 import com.codezmr.nullflow.data.ProfileWithCount
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -348,12 +350,27 @@ private fun InlineNameField(
     onDismiss: () -> Unit
 ) {
     // Auto-focus the field when it appears so the keyboard opens immediately.
+    //
+    // TIMING MATTERS (Android 15): requesting IME focus in the SAME frame the
+    // field is composed is too early — the window's input focus hasn't settled,
+    // so the request is dropped and the keyboard never opens (the field reports
+    // isFocused=false). We therefore:
+    //   1) wait one frame (withFrameNanos) so the layout + focus pass completes,
+    //   2) request focus,
+    //   3) if it still didn't take, retry once after a short delay.
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     var isFocused by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        AppLog.d("InlineNameField('$label'): appeared → requesting IME focus")
+        withFrameNanos { }
+        AppLog.d("InlineNameField('$label'): frame settled → requesting IME focus")
         focusRequester.requestFocus()
+        // Give the focus request a beat to land, then verify + retry once.
+        delay(120)
+        if (!isFocused) {
+            AppLog.w("InlineNameField('$label'): focus did not take → retrying")
+            focusRequester.requestFocus()
+        }
     }
 
     Column(
