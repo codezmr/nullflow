@@ -151,6 +151,9 @@ interface FocusDao {
     @Query("UPDATE focus_sessions SET endTime = :endTime, endReason = :endReason WHERE id = :id")
     suspend fun endSession(id: Long, endTime: Long, endReason: String? = null)
 
+    @Query("DELETE FROM focus_sessions WHERE id = :id")
+    suspend fun deleteSession(id: Long)
+
     @Query("SELECT * FROM focus_sessions WHERE endTime IS NULL LIMIT 1")
     fun observeRunningSession(): Flow<FocusSession?>
 

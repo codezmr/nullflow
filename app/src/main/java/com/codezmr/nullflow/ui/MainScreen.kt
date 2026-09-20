@@ -101,7 +101,13 @@ fun MainScreen(
     val runningSession by dao.observeRunningSession().collectAsState(initial = null)
     val totalMs by dao.observeTotalFocusedMs().collectAsState(initial = 0L)
     val completedCount by dao.observeCompletedCount().collectAsState(initial = 0)
-    val recentSessions by dao.observeRecentSessions(5).collectAsState(initial = emptyList())
+    // Recent sessions, minus accidental tap-tap-tap junk (< 15s).
+    val rawRecentSessions by dao.observeRecentSessions(20).collectAsState(initial = emptyList())
+    val recentSessions = remember(rawRecentSessions) {
+        rawRecentSessions.filter { s ->
+            (s.endTime ?: System.currentTimeMillis()) - s.startTime >= 15_000L
+        }.take(5)
+    }
 
     // ---- Focus Telemetry Console: live interception data ----
     // Top 5 most-intercepted apps (drives the donut + the threat ledger).
@@ -198,14 +204,17 @@ fun MainScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
         ) {
-            // ---- 1. TOP: Screen name + back + settings ----
+            // ---- 1. TOP: Brand mark + screen name + settings ----
+            // The dashboard is the ROOT screen — no in-app back arrow (the
+            // system back gesture already exits). Left slot shows the brand
+            // null-ring mark instead.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
                     .padding(top = 16.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -214,18 +223,28 @@ fun MainScreen(
                         .size(34.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF12151C))
-                        .border(1.dp, Color(0xFF222733), CircleShape)
-                        .clickable {
-                            AppLog.d("Dashboard: back pressed → finishing activity")
-                            (context as? android.app.Activity)?.finish()
-                        },
+                        .border(1.dp, Color(0xFF222733), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("←", fontSize = 16.sp, color = Color(0xFFA0A0A0))
+                    // Null-ring brand mark (circle + slash), echoing the app icon.
+                    Canvas(modifier = Modifier.size(16.dp)) {
+                        val ring = 1.5.dp.toPx()
+                        drawCircle(
+                            color = Color(0xFFA0A0A0),
+                            radius = size.minDimension / 2f - ring / 2f,
+                            style = Stroke(width = ring)
+                        )
+                        drawLine(
+                            color = Color(0xFFA0A0A0),
+                            start = Offset(size.width * 0.22f, size.height * 0.78f),
+                            end = Offset(size.width * 0.78f, size.height * 0.22f),
+                            strokeWidth = ring
+                        )
+                    }
                 }
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    text = "DASHBOARD",
+                    text = "NULLFLOW",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp,
@@ -650,7 +669,15 @@ private fun TelemetryConsole(
     peakHour: PeakHourStats?,
     dailyTelemetry: List<DailyFocusStats>
 ) {
-    var selectedDayIndex by remember { mutableIntStateOf(6) }
+    // Default to TODAY (the last row of the 7-day window). Resolved from the
+    // actual data once it arrives — never assume a fixed index, and never show
+    // a future date.
+    var selectedDayIndex by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(dailyTelemetry) {
+        if (selectedDayIndex == -1 && dailyTelemetry.isNotEmpty()) {
+            selectedDayIndex = dailyTelemetry.lastIndex
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -691,7 +718,7 @@ private fun TelemetryConsole(
         Spacer(Modifier.height(16.dp))
 
         // ---- 2. Day Navigator ----
-        if (dailyTelemetry.isNotEmpty()) {
+        if (dailyTelemetry.isNotEmpty() && selectedDayIndex != -1) {
             val days = dailyTelemetry
             val selected = days.getOrNull(selectedDayIndex) ?: days.last()
             val dayFmt = remember { SimpleDateFormat("EEE, MMM d", Locale.US) }
@@ -809,7 +836,8 @@ private fun TelemetryConsole(
             val maxScore = remember(days) {
                 days.maxOf { focusScore(it) }.coerceAtLeast(1f)
             }
-            val dayLetterFmt = remember { SimpleDateFormat("S", Locale.US) }
+            // Day-of-MONTH (e.g. "20"), not day-of-year ("S" = "269").
+            val dayLetterFmt = remember { SimpleDateFormat("d", Locale.US) }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1123,10 +1151,20 @@ private fun endCurrentSession(dao: FocusDao, scope: kotlinx.coroutines.Coroutine
         try {
             val running = dao.getRunningSession()
             if (running != null) {
-                dao.endSession(running.id, System.currentTimeMillis())
-                // Deactivate the profile so the next toggle starts fresh.
-                dao.setActive(running.profileId, false)
-                AppLog.d("endCurrentSession: session ${running.id} ended, profile ${running.profileId} deactivated")
+                val now = System.currentTimeMillis()
+                val durationMs = now - running.startTime
+                if (durationMs < 15_000L) {
+                    // Accidental tap-tap-tap: drop the row entirely so the
+                    // history (and total-focus stats) stay meaningful.
+                    dao.deleteSession(running.id)
+                    dao.setActive(running.profileId, false)
+                    AppLog.d("endCurrentSession: session ${running.id} was ${durationMs}ms — dropped as junk")
+                } else {
+                    dao.endSession(running.id, now, "completed")
+                    // Deactivate the profile so the next toggle starts fresh.
+                    dao.setActive(running.profileId, false)
+                    AppLog.d("endCurrentSession: session ${running.id} ended, profile ${running.profileId} deactivated")
+                }
             } else {
                 AppLog.w("endCurrentSession: no running session found")
             }
