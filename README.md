@@ -4,33 +4,37 @@ A focus shield for Android. Select the apps that distract you, flip the switch, 
 
 ## How it works
 
-NullFlow uses Android's `VpnService` API to create a local tunnel. When the shield is active, DNS queries and TCP connections from blocked apps are intercepted and dropped at the socket level. The apps still "work" locally but cannot reach the internet — notifications, feeds, and updates simply stop.
+NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6). When the shield is active, DNS queries and TCP/UDP connections from blocked apps are intercepted and dropped at the socket level. The apps still "work" locally but cannot reach the internet — notifications, feeds, and updates simply stop.
 
 - **Local only** — all traffic handling happens on-device
 - **No root** — uses the standard VPN permission (granted once during onboarding)
 - **Per-app rules** — block exactly the apps you choose, per focus mode
+- **IPv4 + IPv6** — both address families are routed into the tunnel, so apps can't bypass via IPv6
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
-| One-tap shield | Circular hero toggle — instant on/off, zero popups |
+| Reactor Core | Hero toggle with live intercept heat — color and pulse driven by real-time blocking activity |
 | Focus modes | Create multiple profiles (e.g. "Deep Work", "No Social") |
 | App picker | Search and select which apps to silence per mode |
-| Quick Settings tile | Toggle the shield from the notification shade |
+| Quick Settings tile | Toggle the shield from the notification shade (live timer + intercept count) |
 | Session tracking | Start/stop times, duration, total focus time |
-| Telemetry dashboard | Intercept counts, top blocked apps, 7-day heatmap |
+| Telemetry dashboard | Intercept counts, top blocked apps, per-app blocked detail, 7-day heatmap |
 | Mode manager | Create, rename, delete focus modes from the dashboard |
+| OEM kill warning | Don'tKillMyApp autostart routing for Xiaomi, Oppo, Vivo, OnePlus + dashboard warning card |
+| Notification HUD | Live focus-session notification with timer + intercept count |
+| File logging | Optional shareable log file (off by default, toggle in Settings) |
 
 ## Install
 
 ### From GitHub Releases
 
 1. Go to [Releases](https://github.com/codezmr/nullflow/releases)
-2. Download `NullFlow-vX.Y.Z.apk`
+2. Download `NullFlow-v1.0.0.apk`
 3. Install on your device (enable "Install unknown apps" for your browser)
-4. Open the app, grant the VPN permission when prompted
-5. Add the "Focus Shield" tile to your Quick Settings panel
+4. Open the app, complete the 3-step onboarding (grant the VPN permission when prompted)
+5. Add the "NullFlow" tile to your Quick Settings panel
 
 ### From source
 
@@ -43,25 +47,37 @@ cd nullflow
 
 ## Requirements
 
-- Android 8.0 (API 26) or higher
+- Android 11 (API 30) or higher
 - No root
-- ~30 MB storage
+- ~12 MB storage (release APK)
 
 ## Architecture
 
 ```
 nullflow/
 ├── app/src/main/java/com/codezmr/nullflow/
-│   ├── vpn/              # VpnService, packet filtering, rule engine
+│   ├── vpn/              # VpnService, packet filtering, heat engine
+│   │   ├── FocusVpnService.kt  # Tunnel, packet reader, HeatState, notification HUD
+│   │   └── HeatState.kt        # Live intercept heat (0..1) + count
 │   ├── data/             # Room database (profiles, sessions, intercepts)
+│   │   ├── FocusDatabase.kt
+│   │   ├── FocusDao.kt
+│   │   ├── Settings.kt         # SharedPreferences (onboarding, prefs, flags)
+│   │   ├── SystemHealth.kt     # Battery-optimization helpers
+│   │   └── OemSettingsHelper.kt# Don'tKillMyApp autostart routing
 │   ├── ui/               # Jetpack Compose screens
 │   │   ├── tile/         # Quick Settings tile panel
-│   │   ├── MainScreen.kt # Dashboard (hero toggle, mode selector, stats)
-│   │   ├── AppPickerSheet.kt
+│   │   ├── MainScreen.kt       # Dashboard (Reactor Core, mode selector, stats)
+│   │   ├── OnboardingScreen.kt # 3-step onboarding (hook, permissions, enhancements)
+│   │   ├── CreateModeScreen.kt # Full-screen mode creation
+│   │   ├── AppPickerSheet.kt   # App picker (reusable content + sheet wrapper)
 │   │   ├── ModeManagerSheet.kt
-│   │   └── Buttons.kt    # Design system components
-│   ├── service/          # Foreground service, notification
-│   └── AppLog.kt         # Logcat-only logger
+│   │   ├── SettingsScreen.kt
+│   │   └── Buttons.kt          # Design system components
+│   ├── tile/             # Quick Settings tile service
+│   │   └── FocusTileService.kt
+│   ├── MainActivity.kt   # Entry point, session reconciliation, QS tile
+│   └── AppLog.kt         # Logcat + optional file logger
 ├── build.gradle.kts
 └── settings.gradle.kts
 ```
@@ -71,8 +87,8 @@ nullflow/
 - **Language:** Kotlin
 - **UI:** Jetpack Compose (Material 3)
 - **Database:** Room (SQLite)
-- **VPN:** Android `VpnService` API
-- **Min SDK:** 26, **Target SDK:** 34
+- **VPN:** Android `VpnService` API (IPv4 + IPv6)
+- **Min SDK:** 30, **Target SDK:** 34
 - **Build:** Gradle 8.7, AGP 8.5.2
 
 ## Privacy
@@ -81,6 +97,7 @@ nullflow/
 - No analytics, no telemetry, no crash reporting
 - All data stored locally in Room (SQLite)
 - VPN tunnel is local-only — packets never leave the device
+- File logging is off by default; when enabled, logs stay on-device and can be shared manually
 
 ## License
 
