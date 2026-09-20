@@ -415,6 +415,18 @@ fun SettingsScreen(
                 }
                 SettingDivider()
                 SettingRow(
+                    title = "Report bug or feedback",
+                    subtitle = "Join our Telegram community"
+                ) {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/nullflow_app"))
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        AppLog.e("Settings: failed to open Telegram", e)
+                    }
+                }
+                SettingDivider()
+                SettingRow(
                     title = "Privacy",
                     subtitle = "All data stays on your device"
                 ) { }
@@ -424,6 +436,17 @@ fun SettingsScreen(
                     subtitle = "MIT License"
                 ) { }
             }
+
+            // ---- Crafted by footer ----
+            Text(
+                text = "Crafted by CodeZMR",
+                fontSize = 12.sp,
+                color = SfgMuted.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
 
             // ---- DEVELOPER section (hidden) ----
             if (showDev) {
