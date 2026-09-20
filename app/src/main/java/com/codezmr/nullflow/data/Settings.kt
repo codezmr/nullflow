@@ -32,27 +32,6 @@ class Settings private constructor(context: Context) {
         get() = prefs.getInt(KEY_AUTO_STOP_MIN, 0)
         set(value) { prefs.edit().putInt(KEY_AUTO_STOP_MIN, value).apply() }
 
-    var blockOnlyScreenOn: Boolean
-        get() = prefs.getBoolean(KEY_BLOCK_SCREEN_ON, true)
-        set(value) { prefs.edit().putBoolean(KEY_BLOCK_SCREEN_ON, value).apply() }
-
-    // ---- Schedule ----
-    var scheduleEnabled: Boolean
-        get() = prefs.getBoolean(KEY_SCHEDULE_ENABLED, false)
-        set(value) { prefs.edit().putBoolean(KEY_SCHEDULE_ENABLED, value).apply() }
-
-    var scheduleStartHour: Int
-        get() = prefs.getInt(KEY_SCHEDULE_START, 9)
-        set(value) { prefs.edit().putInt(KEY_SCHEDULE_START, value).apply() }
-
-    var scheduleEndHour: Int
-        get() = prefs.getInt(KEY_SCHEDULE_END, 18)
-        set(value) { prefs.edit().putInt(KEY_SCHEDULE_END, value).apply() }
-
-    var scheduleDays: Int
-        get() = prefs.getInt(KEY_SCHEDULE_DAYS, 0b1111100)
-        set(value) { prefs.edit().putInt(KEY_SCHEDULE_DAYS, value).apply() }
-
     // ---- Preferences ----
     var hapticsEnabled: Boolean
         get() = prefs.getBoolean(KEY_HAPTICS, true)
@@ -93,11 +72,6 @@ class Settings private constructor(context: Context) {
         private const val KEY_DEFAULT_PROFILE = "default_profile_id"
         private const val KEY_AUTO_START_BOOT = "auto_start_boot"
         private const val KEY_AUTO_STOP_MIN = "auto_stop_minutes"
-        private const val KEY_BLOCK_SCREEN_ON = "block_only_screen_on"
-        private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
-        private const val KEY_SCHEDULE_START = "schedule_start_hour"
-        private const val KEY_SCHEDULE_END = "schedule_end_hour"
-        private const val KEY_SCHEDULE_DAYS = "schedule_days"
         private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_COMPACT = "compact_mode"
         private const val KEY_ACCENT = "accent_color"

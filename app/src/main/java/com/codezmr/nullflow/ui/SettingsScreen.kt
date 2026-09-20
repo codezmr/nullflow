@@ -143,33 +143,6 @@ fun SettingsScreen(
                 )
             }
 
-            // ---- Under-development banner ----
-            // Settings is still being finalized. Warn the user that some
-            // options may not behave as expected on their device.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF2A2410))
-                    .border(1.dp, Color(0xFFB8860B), RoundedCornerShape(12.dp))
-                    .padding(14.dp)
-            ) {
-                Text(
-                    text = "Under Development",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFFFD54F)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Settings is still being finalized. Some options may not work as expected on your device. We're working on it and a stable release is coming soon.",
-                    fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.7f),
-                    lineHeight = 16.sp
-                )
-            }
-
             // ---- SHIELD section ----
             SectionHeader("SHIELD")
             SettingCard {
@@ -193,7 +166,6 @@ fun SettingsScreen(
                     title = "Auto-start on boot",
                     subtitle = "Resume shield after device restart",
                     checked = settings.autoStartOnBoot,
-                    beta = true,
                     onCheckedChange = {
                         settings.autoStartOnBoot = it
                         refresh()
@@ -205,8 +177,7 @@ fun SettingsScreen(
                 // Auto-stop timer
                 SettingRow(
                     title = "Auto-stop after",
-                    subtitle = if (settings.autoStopMinutes > 0) "${settings.autoStopMinutes} min" else "Off",
-                    beta = true
+                    subtitle = if (settings.autoStopMinutes > 0) "${settings.autoStopMinutes} min" else "Off"
                 ) {
                     val options = listOf(0, 15, 25, 30, 45, 60, 90, 120)
                     val currentIdx = options.indexOf(settings.autoStopMinutes).coerceAtLeast(0)
@@ -214,20 +185,6 @@ fun SettingsScreen(
                     settings.autoStopMinutes = options[nextIdx]
                     refresh()
                 }
-
-                SettingDivider()
-
-                // Block only when screen on
-                SettingSwitchRow(
-                    title = "Block only when screen on",
-                    subtitle = "Save battery when phone is locked",
-                    checked = settings.blockOnlyScreenOn,
-                    beta = true,
-                    onCheckedChange = {
-                        settings.blockOnlyScreenOn = it
-                        refresh()
-                    }
-                )
             }
 
             // ---- SYSTEM HEALTH section ----
@@ -238,79 +195,11 @@ fun SettingsScreen(
                     subtitle = if (batteryExempt)
                         "Shield is protected from system sleep"
                     else
-                        "Tap to allow NullFlow to ignore battery limits",
-                    beta = !batteryExempt
+                        "Tap to allow NullFlow to ignore battery limits"
                 ) {
                     if (!batteryExempt) {
                         context.startActivity(SystemHealth.batterySettingsIntent(context))
                         // Status re-checks on ON_RESUME (lifecycle observer above).
-                    }
-                }
-            }
-
-            // ---- SCHEDULE section ----
-            SectionHeader("SCHEDULE")
-            SettingCard {
-                SettingSwitchRow(
-                    title = "Enable schedule",
-                    subtitle = "Auto-activate during set hours",
-                    checked = settings.scheduleEnabled,
-                    beta = true,
-                    onCheckedChange = {
-                        settings.scheduleEnabled = it
-                        refresh()
-                    }
-                )
-
-                if (settings.scheduleEnabled) {
-                    SettingDivider()
-                    SettingRow(
-                        title = "Start time",
-                        subtitle = "${settings.scheduleStartHour}:00"
-                    ) {
-                        settings.scheduleStartHour = (settings.scheduleStartHour + 1) % 24
-                        refresh()
-                    }
-                    SettingDivider()
-                    SettingRow(
-                        title = "End time",
-                        subtitle = "${settings.scheduleEndHour}:00"
-                    ) {
-                        settings.scheduleEndHour = (settings.scheduleEndHour + 1) % 24
-                        refresh()
-                    }
-                    SettingDivider()
-                    // Day selector
-                    val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        dayLabels.forEachIndexed { i, label ->
-                            val isOn = (settings.scheduleDays shr i) and 1 == 1
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isOn) SfgAccent else SfgCard)
-                                    .border(1.dp, if (isOn) SfgAccent else SfgBorder, CircleShape)
-                                    .clickable {
-                                        val newDays = settings.scheduleDays xor (1 shl i)
-                                        settings.scheduleDays = newDays
-                                        refresh()
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isOn) Color(0xFF0A0C10) else SfgMuted
-                                )
-                            }
-                        }
                     }
                 }
             }
@@ -683,29 +572,10 @@ private fun SettingDivider() {
 }
 
 @Composable
-private fun BetaBadge() {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFFF9500).copy(alpha = 0.15f))
-            .border(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp)
-    ) {
-        Text(
-            text = "BETA",
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF9500)
-        )
-    }
-}
-
-@Composable
 private fun SettingRow(
     title: String,
     subtitle: String,
     danger: Boolean = false,
-    beta: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
@@ -716,18 +586,12 @@ private fun SettingRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (danger) Color(0xFFFF3B30) else SfgText
-                )
-                if (beta) {
-                    Spacer(Modifier.width(6.dp))
-                    BetaBadge()
-                }
-            }
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (danger) Color(0xFFFF3B30) else SfgText
+            )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
@@ -748,7 +612,6 @@ private fun SettingSwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
-    beta: Boolean = false,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -758,18 +621,12 @@ private fun SettingSwitchRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = SfgText
-                )
-                if (beta) {
-                    Spacer(Modifier.width(6.dp))
-                    BetaBadge()
-                }
-            }
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = SfgText
+            )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
