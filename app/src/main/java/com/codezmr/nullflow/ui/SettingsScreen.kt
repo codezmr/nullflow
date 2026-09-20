@@ -143,6 +143,31 @@ fun SettingsScreen(
                 )
             }
 
+            // ---- Under-development banner ----
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF2A2410))
+                    .border(1.dp, Color(0xFFB8860B), RoundedCornerShape(12.dp))
+                    .padding(14.dp)
+            ) {
+                Text(
+                    text = "Under Development",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFFFD54F)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Settings is still being finalized. Some options may not work as expected on your device. We're working on it and a stable release is coming soon.",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    lineHeight = 16.sp
+                )
+            }
+
             // ---- SHIELD section ----
             SectionHeader("SHIELD")
             SettingCard {
