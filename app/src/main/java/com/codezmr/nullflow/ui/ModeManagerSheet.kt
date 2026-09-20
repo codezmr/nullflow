@@ -283,13 +283,14 @@ private fun ModeRow(
             )
         }
 
-        // Rename
-        IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
+        // Rename — 48dp minimum touch target (Material spec) so edit and
+        // delete can't be hit by accident on small screens / one-handed use.
+        IconButton(onClick = onRename, modifier = Modifier.size(48.dp)) {
             Text("✎", color = SheetMuted, fontSize = 16.sp)
         }
 
         // Delete
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
             Text("✕", color = SheetMuted, fontSize = 16.sp)
         }
     }

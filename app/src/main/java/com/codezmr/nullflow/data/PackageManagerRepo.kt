@@ -87,15 +87,63 @@ class PackageManagerRepo(private val context: Context) {
 
     private fun loadIcon(info: ApplicationInfo): Bitmap {
         val drawable: Drawable = info.loadIcon(pm)
-        return if (drawable is BitmapDrawable && drawable.bitmap != null) {
+        val bmp = if (drawable is BitmapDrawable && drawable.bitmap != null) {
             drawable.bitmap
         } else {
             val size = 96
-            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bmp)
+            val b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(b)
             drawable.setBounds(0, 0, size, size)
             drawable.draw(canvas)
-            bmp
+            b
         }
+        // Some third-party apps (adaptive/animated drawables) render to an
+        // all-transparent bitmap. Detect that and return a letter avatar so
+        // the picker never shows a blank grey circle.
+        return if (isBlankBitmap(bmp)) letterAvatar(info.loadLabel(pm).toString()) else bmp
+    }
+
+    /** True if every sampled pixel is (near-)transparent. */
+    private fun isBlankBitmap(bmp: Bitmap): Boolean {
+        if (bmp.width < 4 || bmp.height < 4) return true
+        val stepX = bmp.width / 8
+        val stepY = bmp.height / 8
+        var samples = 0
+        for (y in 0 until bmp.height step stepY.coerceAtLeast(1)) {
+            for (x in 0 until bmp.width step stepX.coerceAtLeast(1)) {
+                if ((bmp.getPixel(x, y) ushr 24) > 16) return false
+                samples++
+            }
+        }
+        return samples == 0
+    }
+
+    /** Simple colored circle + first letter, used when an app icon fails to load. */
+    private fun letterAvatar(label: String): Bitmap {
+        val size = 96
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        // Deterministic hue from the label so each app gets a stable color.
+        val hue = (label.hashCode() and 0xFF) / 360f
+        val color = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.45f, 0.55f))
+        val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+        }
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, bg)
+        val letter = label.firstOrNull { it.isLetterOrDigit() }?.toString() ?: "?"
+        val text = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = android.graphics.Color.WHITE
+            textSize = size * 0.5f
+            textAlign = android.graphics.Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+        val fm = text.fontMetrics
+        canvas.drawText(
+            letter,
+            size / 2f,
+            size / 2f - (fm.ascent + fm.descent) / 2f,
+            text
+        )
+        return bmp
     }
 }
