@@ -257,7 +257,10 @@ fun ModeManagerSheet(
             SecondaryButton(
                 text = "New Mode",
                 icon = "+",
-                onClick = { showCreate = true }
+                onClick = {
+                    AppLog.d("ModeManager: 'New Mode' tapped → showCreate=true")
+                    showCreate = true
+                }
             )
         }
     }
@@ -349,6 +352,7 @@ private fun InlineNameField(
     val focusManager = LocalFocusManager.current
     var isFocused by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        AppLog.d("InlineNameField('$label'): appeared → requesting IME focus")
         focusRequester.requestFocus()
     }
 
@@ -377,7 +381,10 @@ private fun InlineNameField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
-                    .onFocusChanged { isFocused = it.isFocused }
+                    .onFocusChanged {
+                        isFocused = it.isFocused
+                        AppLog.d("InlineNameField('$label'): focus changed → isFocused=${it.isFocused}")
+                    }
                     .clip(RoundedCornerShape(8.dp))
                     .background(SheetBg)
                     .border(
