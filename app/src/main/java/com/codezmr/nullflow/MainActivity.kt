@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.codezmr.nullflow.data.FocusDatabase
 import com.codezmr.nullflow.data.Settings
 import com.codezmr.nullflow.ui.AppPickerSheet
+import com.codezmr.nullflow.ui.CreateModeScreen
 import com.codezmr.nullflow.ui.MainScreen
 import com.codezmr.nullflow.ui.ModeManagerSheet
 import com.codezmr.nullflow.ui.NullFlowTheme
@@ -163,10 +164,13 @@ class MainActivity : ComponentActivity() {
                 } else {
                     // Picker sheet state lives here so MainScreen can open it.
                     var pickerProfileId by remember { mutableStateOf<Long?>(null) }
-                    // Mode manager sheet state (lifted here so a newly created
-                    // mode can chain straight into the app picker — seamless
-                    // setup with no "0 apps" dead-end).
+                    // Mode manager sheet state (lifted here so the manager can
+                    // open from the dashboard).
                     var showModeManager by remember { mutableStateOf(false) }
+                    // Full-screen "Create Mode" route (Scenario A). New-mode
+                    // creation happens here — a standard window where the
+                    // keyboard opens reliably (no nested-sheet IME bugs).
+                    var showCreateMode by remember { mutableStateOf(false) }
 
                     MainScreen(
                         dao = dao,
@@ -174,7 +178,11 @@ class MainActivity : ComponentActivity() {
                             AppLog.d("open app picker for profile $profileId")
                             pickerProfileId = profileId
                         },
-                        onOpenModeManager = { showModeManager = true }
+                        onOpenModeManager = { showModeManager = true },
+                        onCreateMode = {
+                            AppLog.d("dashboard: create mode → opening CreateModeScreen")
+                            showCreateMode = true
+                        }
                     )
 
                     if (showModeManager) {
@@ -200,10 +208,10 @@ class MainActivity : ComponentActivity() {
                                 ModeManagerSheet(
                                     dao = dao,
                                     onDismiss = { showModeManager = false },
-                                    onModeCreated = { newId ->
-                                        AppLog.d("mode created (id=$newId) → chaining into app picker")
+                                    onCreateMode = {
+                                        AppLog.d("manager: New Mode → opening CreateModeScreen")
                                         showModeManager = false
-                                        pickerProfileId = newId
+                                        showCreateMode = true
                                     }
                                 )
                             }
@@ -215,6 +223,16 @@ class MainActivity : ComponentActivity() {
                             dao = dao,
                             profileId = pickerProfileId!!,
                             onDismiss = { pickerProfileId = null }
+                        )
+                    }
+
+                    if (showCreateMode) {
+                        CreateModeScreen(
+                            dao = dao,
+                            onBack = {
+                                AppLog.d("CreateModeScreen: back → closing")
+                                showCreateMode = false
+                            }
                         )
                     }
                 }

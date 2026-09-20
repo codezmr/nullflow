@@ -97,7 +97,8 @@ import kotlinx.coroutines.launch
 fun MainScreen(
     dao: FocusDao,
     onOpenPicker: (Long) -> Unit,
-    onOpenModeManager: () -> Unit
+    onOpenModeManager: () -> Unit,
+    onCreateMode: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -410,7 +411,7 @@ fun MainScreen(
                                 SecondaryButton(
                                     text = "Create your first mode",
                                     icon = "+",
-                                    onClick = onOpenModeManager,
+                                    onClick = onCreateMode,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
