@@ -1,5 +1,8 @@
 package com.codezmr.nullflow.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,7 +39,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -351,24 +356,41 @@ private fun InlineNameField(
 ) {
     // Auto-focus the field when it appears so the keyboard opens immediately.
     //
-    // TIMING MATTERS (Android 15): requesting IME focus in the SAME frame the
-    // field is composed is too early — the window's input focus hasn't settled,
-    // so the request is dropped and the keyboard never opens (the field reports
-    // isFocused=false). We therefore:
-    //   1) wait one frame (withFrameNanos) so the layout + focus pass completes,
-    //   2) request focus,
-    //   3) if it still didn't take, retry once after a short delay.
+    // ROOT CAUSE (Android 15): requesting IME focus while the sheet is still
+    // mid-layout-transition (the field just expanded into the layout) gets
+    // silently dropped — the window's input focus hasn't settled, so the field
+    // never captures focus and the keyboard never opens. A blind delay or a
+    // brute-force WindowInsetsController.show(ime()) doesn't help: the IME
+    // needs a focused input target, and the field isn't focused yet.
+    //
+    // FIX: animate the field's appearance (scale + alpha) and fire
+    // requestFocus() ONLY when that animation COMPLETES. By then the layout
+    // pass is 100% done, the window focus has settled, and the focus request
+    // lands on a stable, focusable target.
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     var isFocused by remember { mutableStateOf(false) }
+
+    // Entry animation: scale 0.96→1.0 + alpha 0→1 over 200ms. The field is
+    // fully laid out and visible by the time this completes. We use Animatable
+    // (not animateFloatAsState) so we can snap to the start value on first
+    // composition, then animate to the end value.
+    val entryScale = remember { Animatable(0.96f) }
+    val entryAlpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        withFrameNanos { }
-        AppLog.d("InlineNameField('$label'): frame settled → requesting IME focus")
-        focusRequester.requestFocus()
-        // Give the focus request a beat to land, then verify + retry once.
-        delay(120)
-        if (!isFocused) {
-            AppLog.w("InlineNameField('$label'): focus did not take → retrying")
+        launch {
+            entryScale.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
+        }
+        launch {
+            entryAlpha.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
+        }
+    }
+    // Fire the focus request when the entry animation settles (scale + alpha
+    // both reach 1.0). By then the layout pass is 100% done and the window
+    // focus has settled, so the request lands on a stable target.
+    LaunchedEffect(entryScale.value, entryAlpha.value) {
+        if (entryScale.value == 1f && entryAlpha.value == 1f && !isFocused) {
+            AppLog.d("InlineNameField('$label'): entry settled → requesting IME focus")
             focusRequester.requestFocus()
         }
     }
@@ -376,6 +398,8 @@ private fun InlineNameField(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .scale(entryScale.value)
+            .alpha(entryAlpha.value)
             .clip(RoundedCornerShape(12.dp))
             .background(SheetSurface)
             .border(1.dp, SheetAccent.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
