@@ -105,4 +105,4 @@ MIT - see [LICENSE](LICENSE).
 
 ## Contributing
 
-PRs welcome. See `doc/` for design specs and architecture notes.
+PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
