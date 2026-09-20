@@ -35,13 +35,18 @@ import kotlinx.coroutines.runBlocking
  * We do NOT use addDisallowedApplication. Instead we route ONLY the blocked
  * apps INTO the VPN tunnel, and the tunnel goes nowhere:
  *
- *   - addAddress("10.0.0.2", 32) + addRoute("0.0.0.0", 0)
- *       → everything that enters the VPN is addressed into a dead-end.
+ *   - addAddress("10.0.0.2", 32) + addRoute("0.0.0.0", 0)   [IPv4]
+ *   - addAddress("fd00::2", 128) + addRoute("::", 0)         [IPv6]
+ *       → everything that enters the VPN (v4 AND v6) is addressed into a
+ *         dead-end. The v6 route is essential: Meta apps (Instagram/Facebook)
+ *         default to IPv6 + QUIC, and without it their traffic bypasses the
+ *         tunnel entirely.
  *   - addAllowedApplication(pkg) for each blocked package
  *       → ONLY these apps' traffic enters the tunnel.
  *   - setBlocking(true)
  *       → their packets are silently DROPPED (no RST, no error dialog —
- *         the app just sees "no internet", i.e. a single tick).
+ *         the app just sees "no internet", i.e. a single tick). This drops
+ *         TCP and UDP/QUIC alike — the tunnel is protocol-agnostic.
  *
  * Every other app BYPASSES the VPN entirely and keeps full internet.
  * No data ever leaves the phone.
@@ -386,8 +391,25 @@ class FocusVpnService : VpnService() {
     private fun establishTunnel(packages: List<String>): ParcelFileDescriptor? {
         val builder = Builder()
         builder.setSession("NullFlow")
+        // IPv4: route the entire v4 internet into the blackhole tunnel.
         builder.addAddress("10.0.0.2", 32)
-        builder.addRoute("0.0.0.0", 0) // route all VPN traffic to nowhere
+        builder.addRoute("0.0.0.0", 0)
+        // IPv6: Meta apps (Instagram, Facebook) aggressively default to IPv6 +
+        // QUIC (HTTP/3 over UDP). Without an explicit v6 route the OS sends all
+        // IPv6 traffic straight out the real network, bypassing the tunnel —
+        // which is exactly how Instagram "bypasses" the shield. Capture v6 too.
+        // The dummy address is never used (setBlocking drops everything); it
+        // just satisfies the builder's requirement for a v6 interface address.
+        try {
+            builder.addAddress("fd00::2", 128)
+            builder.addRoute("::", 0)
+            AppLog.d("tunnel: IPv6 route added (::/0 → blackhole)")
+        } catch (e: Exception) {
+            // Some OEM kernels reject a v6 route; degrade to IPv4-only rather
+            // than failing the whole tunnel. Log loudly so the leak is visible.
+            AppLog.w("tunnel: IPv6 route FAILED (falling back to IPv4-only) — " +
+                "IPv6/QUIC traffic may bypass the shield :: ${e.message}")
+        }
         for (pkg in packages) {
             try {
                 builder.addAllowedApplication(pkg)
@@ -396,7 +418,7 @@ class FocusVpnService : VpnService() {
                 AppLog.w("Blocked app no longer installed: $pkg")
             }
         }
-        builder.setBlocking(true) // silently DROP their packets
+        builder.setBlocking(true) // silently DROP their packets (TCP + UDP/QUIC)
 
         AppLog.d("calling builder.establish() ...")
         return try {
