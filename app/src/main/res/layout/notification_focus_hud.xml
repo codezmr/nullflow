@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Focus Session HUD — custom RemoteViews layout for the persistent VPN
+  Focus Session HUD - custom RemoteViews layout for the persistent VPN
   notification.
 
   Design: a rounded "card" with clear visual hierarchy:
@@ -9,7 +9,7 @@
     Row 3: full-width "End Session" button + "Tap for details" hint
 
   OEM-SAFETY RULES (heavily skinned OSes reflow layouts aggressively):
-   - LinearLayout only (NO ConstraintLayout — OEMs mangle it in RemoteViews).
+   - LinearLayout only (NO ConstraintLayout - OEMs mangle it in RemoteViews).
    - Fixed/relative heights, no wrap_content on the root.
    - singleLine + ellipsize on every TextView (prevents clipping/overflow).
    - No margins that depend on system insets.

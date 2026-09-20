@@ -46,7 +46,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Logging + crash capture MUST be first — before anything can fail.
+        // Logging + crash capture MUST be first - before anything can fail.
         AppLog.init(applicationContext)
         installCrashHandler()
         AppLog.d("MainActivity.onCreate (savedState=${savedInstanceState != null})")
@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
                     AppLog.w("Reconciled stale session ${running.id} (service not running on app start) → aborted_by_system")
                     com.codezmr.nullflow.data.SystemHealth.postShieldKilledNotification(this@MainActivity)
                     // Flag the dashboard to show the OEM kill warning card.
-                    // (Not derived from the session reason — see Settings.kt.)
+                    // (Not derived from the session reason - see Settings.kt.)
                     Settings.get(this@MainActivity).showOemKillWarning = true
                 }
             }
@@ -132,7 +132,7 @@ class MainActivity : ComponentActivity() {
                                 //    ACTION_STOP to the service → teardown()
                                 //    closes the tunnel, removes the notification,
                                 //    ends the Room session, deactivates the profile.
-                                //    Idempotent — safe if the shield is already off.
+                                //    Idempotent - safe if the shield is already off.
                                 try {
                                     startService(FocusVpnService.stopIntent(this))
                                     AppLog.d("exit: ACTION_STOP sent to FocusVpnService")
@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity() {
                                 //    this task). The shield is already stopped
                                 //    above, so nothing lingers in the background.
                                 finishAffinity()
-                                AppLog.d("exit: finishAffinity() called — app closing")
+                                AppLog.d("exit: finishAffinity() called - app closing")
                             }) {
                                 Text("Exit")
                             }
@@ -179,7 +179,7 @@ class MainActivity : ComponentActivity() {
                     // open from the dashboard).
                     var showModeManager by remember { mutableStateOf(false) }
                     // Full-screen "Create Mode" route (Scenario A). New-mode
-                    // creation happens here — a standard window where the
+                    // creation happens here - a standard window where the
                     // keyboard opens reliably (no nested-sheet IME bugs).
                     var showCreateMode by remember { mutableStateOf(false) }
 
@@ -268,16 +268,16 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Request the system to add the GhostShield Quick Settings tile (1-tap,
-     * no manual drag-and-drop). Android 13+ (TIRAMISU) only — older versions
+     * no manual drag-and-drop). Android 13+ (TIRAMISU) only - older versions
      * must pin the tile manually (the onboarding shows a fallback card there).
      *
      * @param onResult called on the main thread with `true` if the user
      *   confirmed the add, `false` if they dismissed it (or on pre-33 where
-     *   the API is unavailable — the caller should treat that as "skip").
+     *   the API is unavailable - the caller should treat that as "skip").
      */
     fun requestAddQsTile(onResult: (Boolean) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            AppLog.d("requestAddQsTile: pre-Android 13 — API unavailable, reporting false")
+            AppLog.d("requestAddQsTile: pre-Android 13 - API unavailable, reporting false")
             onResult(false)
             return
         }
@@ -319,7 +319,7 @@ class MainActivity : ComponentActivity() {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
                 AppLog.stackTrace(
-                    "UNCAUGHT EXCEPTION on thread '${thread.name}' — app will crash",
+                    "UNCAUGHT EXCEPTION on thread '${thread.name}' - app will crash",
                     throwable
                 )
             } catch (_: Exception) {

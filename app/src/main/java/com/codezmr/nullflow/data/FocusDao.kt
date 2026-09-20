@@ -132,7 +132,7 @@ interface FocusDao {
     fun getInterceptionsByAppAll(): Flow<List<AppInterceptStats>>
 
     /**
-     * The hour of day (0-23, local time) with the most intercepted pings —
+     * The hour of day (0-23, local time) with the most intercepted pings -
      * the "Peak Focus Time" metric. Null when there are no intercepts yet.
      */
     @Query(

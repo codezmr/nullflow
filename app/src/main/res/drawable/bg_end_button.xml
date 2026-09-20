@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- "End Session" button — solid cyan, rounded. -->
+<!-- "End Session" button - solid cyan, rounded. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="#FF00E5FF" />

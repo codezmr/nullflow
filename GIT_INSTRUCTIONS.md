@@ -1,4 +1,4 @@
-# NullFlow — Git Instructions
+# NullFlow - Git Instructions
 
 ## Repo
 - GitHub: https://github.com/codezmr/nullflow (public)
@@ -12,7 +12,7 @@
 - Git identity: codezmr <mdzamiruddin.zmr@gmail.com>
 
 ## Conventions
-- Commit style: short imperative subject, e.g. "Add Focus Telemetry Console — live interception data"
+- Commit style: short imperative subject, e.g. "Add Focus Telemetry Console - live interception data"
 - Update SESSION_STATE.md when committing feature work (existing pattern in history)
 - Never commit: local.properties, .gradle/, build/, *.apk, *.aab, .weave/ (already in .gitignore)
 - Push with: git push (tracking already set)
@@ -21,7 +21,7 @@
 - **NEVER work on or touch the `master` branch.** All work happens on feature
   branches (e.g. `dev` or `feature/<name>`), branched off `master`.
 - **ALWAYS ask Zamir before any `git commit` or `git push`.** No autonomous
-  commits or pushes — wait for explicit go-ahead.
+  commits or pushes - wait for explicit go-ahead.
 - **ALWAYS create an MR/PR and hand the link to Zamir. NEVER merge it yourself.**
   Zamir reviews and merges.
 

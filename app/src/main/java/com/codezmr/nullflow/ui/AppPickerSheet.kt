@@ -75,7 +75,7 @@ private val MutedText = Color(0xFFA0A0A0)
 private val BadgeUnselected = Color(0xFF1E2430)
 
 /**
- * "The Focus Matrix" — the app picker, redesigned with NO checkboxes.
+ * "The Focus Matrix" - the app picker, redesigned with NO checkboxes.
  *
  *  - Sticky dark-glass search bar (filters the entire list by label).
  *  - Tactile App Cards: unselected = dark + "+ ADD"; selected = cyan glow +
@@ -83,7 +83,7 @@ private val BadgeUnselected = Color(0xFF1E2430)
  *    thud haptic.
  *  - "Done · N apps selected" bar at the bottom.
  *
- *  Users build their own modes by picking individual apps — no opaque
+ *  Users build their own modes by picking individual apps - no opaque
  *  predefined categories (trust: the user always sees exactly what's blocked).
  */
 /**
@@ -283,7 +283,7 @@ fun AppPickerContent(
 }
 
 /**
- * "The Focus Matrix" — the app picker as a bottom sheet.
+ * "The Focus Matrix" - the app picker as a bottom sheet.
  *
  * Thin wrapper around [AppPickerContent] so the existing sheet-based flow
  * (edit apps on an existing mode) is unchanged. New-mode creation now uses
@@ -325,7 +325,7 @@ fun AppPickerSheet(
             else
                 "Done",
             onAction = {
-                AppLog.d("AppPicker: DONE tapped — closing sheet ($count apps)")
+                AppLog.d("AppPicker: DONE tapped - closing sheet ($count apps)")
                 onDismiss()
             }
         )
@@ -343,7 +343,7 @@ private fun TactileAppCard(
     isShielded: Boolean,
     onToggle: () -> Unit
 ) {
-    // Icon is already loaded + cached by PackageManagerRepo — render it
+    // Icon is already loaded + cached by PackageManagerRepo - render it
     // directly. No second async load, so the slot is never empty.
     val iconPainter = remember(iconBitmap) { BitmapPainter(iconBitmap.asImageBitmap()) }
     var isPressed by remember { mutableStateOf(false) }

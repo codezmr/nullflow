@@ -226,7 +226,7 @@ fun ModeManagerSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        // Create — navigates to the full-screen CreateModeScreen (Scenario A).
+        // Create - navigates to the full-screen CreateModeScreen (Scenario A).
         // No inline field: the nested-sheet IME focus bug is eliminated by
         // doing creation in a standard full-screen window.
         SecondaryButton(
@@ -294,7 +294,7 @@ private fun ModeRow(
             )
         }
 
-        // Rename — 48dp minimum touch target (Material spec) so edit and
+        // Rename - 48dp minimum touch target (Material spec) so edit and
         // delete can't be hit by accident on small screens / one-handed use.
         IconButton(onClick = onRename, modifier = Modifier.size(48.dp)) {
             Text("✎", color = SheetMuted, fontSize = 16.sp)
@@ -308,7 +308,7 @@ private fun ModeRow(
 }
 
 /**
- * Inline name field — expands INSIDE the sheet (no stacked modal dialog).
+ * Inline name field - expands INSIDE the sheet (no stacked modal dialog).
  * Used for both "New Mode" creation and in-row renaming.
  */
 @Composable
@@ -325,7 +325,7 @@ private fun InlineNameField(
     //
     // ROOT CAUSE (Android 15): requesting IME focus while the sheet is still
     // mid-layout-transition (the field just expanded into the layout) gets
-    // silently dropped — the window's input focus hasn't settled, so the field
+    // silently dropped - the window's input focus hasn't settled, so the field
     // never captures focus and the keyboard never opens. A blind delay or a
     // brute-force WindowInsetsController.show(ime()) doesn't help: the IME
     // needs a focused input target, and the field isn't focused yet.

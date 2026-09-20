@@ -1,21 +1,21 @@
 # NullFlow
 
-A focus shield for Android. Select the apps that distract you, flip the switch, and NullFlow silently drops their network traffic through a local VPN tunnel — no root, no cloud, no data leaves your device.
+A focus shield for Android. Select the apps that distract you, flip the switch, and NullFlow silently drops their network traffic through a local VPN tunnel - no root, no cloud, no data leaves your device.
 
 ## How it works
 
-NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6). When the shield is active, DNS queries and TCP/UDP connections from blocked apps are intercepted and dropped at the socket level. The apps still "work" locally but cannot reach the internet — notifications, feeds, and updates simply stop.
+NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6). When the shield is active, DNS queries and TCP/UDP connections from blocked apps are intercepted and dropped at the socket level. The apps still "work" locally but cannot reach the internet - notifications, feeds, and updates simply stop.
 
-- **Local only** — all traffic handling happens on-device
-- **No root** — uses the standard VPN permission (granted once during onboarding)
-- **Per-app rules** — block exactly the apps you choose, per focus mode
-- **IPv4 + IPv6** — both address families are routed into the tunnel, so apps can't bypass via IPv6
+- **Local only** - all traffic handling happens on-device
+- **No root** - uses the standard VPN permission (granted once during onboarding)
+- **Per-app rules** - block exactly the apps you choose, per focus mode
+- **IPv4 + IPv6** - both address families are routed into the tunnel, so apps can't bypass via IPv6
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
-| Reactor Core | Hero toggle with live intercept heat — color and pulse driven by real-time blocking activity |
+| Reactor Core | Hero toggle with live intercept heat - color and pulse driven by real-time blocking activity |
 | Focus modes | Create multiple profiles (e.g. "Deep Work", "No Social") |
 | App picker | Search and select which apps to silence per mode |
 | Quick Settings tile | Toggle the shield from the notification shade (live timer + intercept count) |
@@ -96,12 +96,12 @@ nullflow/
 - No network calls (except the blocked apps' own traffic, which is dropped)
 - No analytics, no telemetry, no crash reporting
 - All data stored locally in Room (SQLite)
-- VPN tunnel is local-only — packets never leave the device
+- VPN tunnel is local-only - packets never leave the device
 - File logging is off by default; when enabled, logs stay on-device and can be shared manually
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).
 
 ## Contributing
 

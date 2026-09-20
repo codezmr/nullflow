@@ -17,7 +17,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * The "Zero-Leak Shareable Dossier" — a 9:16 Instagram-ready share card that
+ * The "Zero-Leak Shareable Dossier" - a 9:16 Instagram-ready share card that
  * summarizes the user's focus achievements.
  *
  *  - Rendered as a Compose layout (brand logo, total focus time, total
@@ -27,11 +27,11 @@ import java.util.Locale
  *
  * ZERO-LEAK: the card contains ONLY aggregate stats (total focus time + total
  * deflected pings) and the NullFlow brand. No app names, no package names, no
- * per-app breakdown — so sharing it leaks nothing about the user's habits.
+ * per-app breakdown - so sharing it leaks nothing about the user's habits.
  */
 object DossierGenerator {
 
-    /** 9:16 share-card dimensions in px (1080×1920 — standard Instagram story). */
+    /** 9:16 share-card dimensions in px (1080×1920 - standard Instagram story). */
     private const val CARD_WIDTH_PX = 1080
     private const val CARD_HEIGHT_PX = 1920
 
@@ -64,7 +64,7 @@ object DossierGenerator {
 
     /**
      * Render the 9:16 share card into a Bitmap using pure Android Canvas
-     * drawing (no Compose — avoids the windowRecomposer crash when rendering
+     * drawing (no Compose - avoids the windowRecomposer crash when rendering
      * off-screen).
      */
     private fun renderCard(

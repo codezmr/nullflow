@@ -10,7 +10,7 @@ import android.os.PowerManager
  * Battery-optimization helpers for keeping the shield service alive.
  *
  * Play Store policy: we must NOT use ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
- * (direct exemption request — restricted permission). Instead we route the user
+ * (direct exemption request - restricted permission). Instead we route the user
  * to the system's battery-optimization settings screen
  * (ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) and let them make the choice.
  */
@@ -25,7 +25,7 @@ object SystemHealth {
 
     /**
      * Intent that opens the system "Ignore battery optimizations" settings list.
-     * No special permission required — this is a plain settings screen.
+     * No special permission required - this is a plain settings screen.
      */
     fun batterySettingsIntent(context: Context): Intent =
         Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)

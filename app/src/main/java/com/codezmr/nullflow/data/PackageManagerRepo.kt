@@ -21,7 +21,7 @@ data class InstalledApp(
  * Lists the user's installed apps for the picker.
  *
  * Filters OUT system apps (pre-installed / platform) so the sheet shows
- * only what the user actually installed — plus a small allow-list of
+ * only what the user actually installed - plus a small allow-list of
  * "target" apps (WhatsApp, Instagram, …) that are sometimes system-updated.
  *
  * Icons + labels are loaded once and cached in memory to prevent UI stutter
@@ -57,7 +57,7 @@ class PackageManagerRepo(private val context: Context) {
 
     /**
      * Returns the list of user apps. Loads (and caches) on first call.
-     * Runs on [Dispatchers.IO] — call from a coroutine.
+     * Runs on [Dispatchers.IO] - call from a coroutine.
      */
     suspend fun getInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
         if (!loaded) {

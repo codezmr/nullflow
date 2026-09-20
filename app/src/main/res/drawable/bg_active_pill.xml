@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- "ACTIVE" status pill — subtle cyan tint on a dark base. -->
+<!-- "ACTIVE" status pill - subtle cyan tint on a dark base. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="#1F00E5FF" />

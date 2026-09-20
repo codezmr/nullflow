@@ -62,7 +62,7 @@ android {
     }
 }
 
-// Name the output APK "NullFlow.apk" (legacy API —
+// Name the output APK "NullFlow.apk" (legacy API -
 // androidComponents.outputFileName does NOT exist in AGP 8.5.2)
 android.applicationVariants.all {
     outputs.forEach { output ->
@@ -83,7 +83,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
 
-    // Material Components — required for com.google.android.material.bottomsheet
+    // Material Components - required for com.google.android.material.bottomsheet
     // .BottomSheetDialog, which TileService.showDialog() needs to host the
     // Compose Focus Panel as a native system overlay.
     implementation("com.google.android.material:material:1.11.0")

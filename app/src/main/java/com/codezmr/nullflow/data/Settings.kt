@@ -81,7 +81,7 @@ class Settings private constructor(context: Context) {
     // ---- OEM kill warning ----
     // Set to true when we detect the OS killed the shield mid-session. Drives
     // the persistent red warning card on the dashboard. Deliberately NOT
-    // derived from the last session's aborted_by_system flag — that would keep
+    // derived from the last session's aborted_by_system flag - that would keep
     // the card stuck on screen until the user completes a new session. The
     // user clears it by tapping "Fix Settings" or "Dismiss".
     var showOemKillWarning: Boolean

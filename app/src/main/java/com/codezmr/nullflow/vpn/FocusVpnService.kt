@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
- * The "Blackhole" — NullFlow's Local Privacy Shield engine.
+ * The "Blackhole" - NullFlow's Local Privacy Shield engine.
  *
  * HOW IT WORKS (crucial):
  * We do NOT use addDisallowedApplication. Instead we route ONLY the blocked
@@ -44,9 +44,9 @@ import kotlinx.coroutines.runBlocking
  *   - addAllowedApplication(pkg) for each blocked package
  *       → ONLY these apps' traffic enters the tunnel.
  *   - setBlocking(true)
- *       → their packets are silently DROPPED (no RST, no error dialog —
+ *       → their packets are silently DROPPED (no RST, no error dialog -
  *         the app just sees "no internet", i.e. a single tick). This drops
- *         TCP and UDP/QUIC alike — the tunnel is protocol-agnostic.
+ *         TCP and UDP/QUIC alike - the tunnel is protocol-agnostic.
  *
  * Every other app BYPASSES the VPN entirely and keeps full internet.
  * No data ever leaves the phone.
@@ -175,7 +175,7 @@ class FocusVpnService : VpnService() {
     /**
      * Live count of deflected connection attempts ("pings"). Incremented by the
      * packet-reader loop on each DETECTED connection attempt (2s-silence
-     * heuristic — see startPacketReader). Thread-safe (the reader runs on IO,
+     * heuristic - see startPacketReader). Thread-safe (the reader runs on IO,
      * the ticker reads it on the main/IO loop). Reset to 0 on every fresh
      * session start.
      */
@@ -269,11 +269,11 @@ class FocusVpnService : VpnService() {
         // This is the fix for the "End session" desync: the notification's
         // ACTION_STOP only stopped the service before, leaving a stale running
         // session in Room (so the tile showed OFF but the panel showed ON).
-        // Now EVERY stop path cleans Room. Idempotent — no-op if no session.
+        // Now EVERY stop path cleans Room. Idempotent - no-op if no session.
         clearRoomSession()
         // 5) Stop the service.
         stopSelf()
-        AppLog.d("teardown: COMPLETE — service stopping")
+        AppLog.d("teardown: COMPLETE - service stopping")
     }
 
     /**
@@ -326,9 +326,9 @@ class FocusVpnService : VpnService() {
             }
             // A NULL intent means the system is re-delivering after the process
             // died (sticky restart). We must NOT re-establish the tunnel in that
-            // case — that's what kept bringing the VPN icon back after OFF.
+            // case - that's what kept bringing the VPN icon back after OFF.
             null -> {
-                AppLog.w("onStartCommand with NULL intent (system re-delivery) — teardown, NOT re-establishing")
+                AppLog.w("onStartCommand with NULL intent (system re-delivery) - teardown, NOT re-establishing")
                 teardown()
                 return START_NOT_STICKY
             }
@@ -349,12 +349,12 @@ class FocusVpnService : VpnService() {
      * then decide whether to stay active or stop.
      */
     private fun startShield(profileId: Long) {
-        // 1) Go foreground FIRST — satisfies the 5s contract no matter what.
+        // 1) Go foreground FIRST - satisfies the 5s contract no matter what.
         sessionStartedAt = System.currentTimeMillis()
         _sessionStart.value = sessionStartedAt
         try {
             startForeground(NOTIF_ID, buildNotification())
-            AppLog.d("startForeground OK — notification posted (before tunnel)")
+            AppLog.d("startForeground OK - notification posted (before tunnel)")
         } catch (e: Exception) {
             AppLog.e("startForeground FAILED (notification may not show)", e)
         }
@@ -371,7 +371,7 @@ class FocusVpnService : VpnService() {
         AppLog.d("startShield: profileId=$profileId blocked=${packages.size} pkgs → $packages")
 
         if (packages.isEmpty()) {
-            AppLog.w("No blocked apps for this profile — nothing to shield. Stopping. " +
+            AppLog.w("No blocked apps for this profile - nothing to shield. Stopping. " +
                 "(UI should tell the user to add apps first.)")
             teardown()
             return
@@ -398,7 +398,7 @@ class FocusVpnService : VpnService() {
         startInterceptFlusher()
         startTimerUpdates()
         startAutoStopTimer()
-        AppLog.d("Shield ACTIVE — ${packages.size} apps blackholed. fd=$fd")
+        AppLog.d("Shield ACTIVE - ${packages.size} apps blackholed. fd=$fd")
     }
 
     /**
@@ -431,7 +431,7 @@ class FocusVpnService : VpnService() {
         builder.addRoute("0.0.0.0", 0)
         // IPv6: Meta apps (Instagram, Facebook) aggressively default to IPv6 +
         // QUIC (HTTP/3 over UDP). Without an explicit v6 route the OS sends all
-        // IPv6 traffic straight out the real network, bypassing the tunnel —
+        // IPv6 traffic straight out the real network, bypassing the tunnel -
         // which is exactly how Instagram "bypasses" the shield. Capture v6 too.
         // The dummy address is never used (setBlocking drops everything); it
         // just satisfies the builder's requirement for a v6 interface address.
@@ -442,7 +442,7 @@ class FocusVpnService : VpnService() {
         } catch (e: Exception) {
             // Some OEM kernels reject a v6 route; degrade to IPv4-only rather
             // than failing the whole tunnel. Log loudly so the leak is visible.
-            AppLog.w("tunnel: IPv6 route FAILED (falling back to IPv4-only) — " +
+            AppLog.w("tunnel: IPv6 route FAILED (falling back to IPv4-only) - " +
                 "IPv6/QUIC traffic may bypass the shield :: ${e.message}")
         }
         for (pkg in packages) {
@@ -467,14 +467,14 @@ class FocusVpnService : VpnService() {
     /**
      * Launch the packet-reader loop for a given tunnel fd.
      *
-     * The blackhole tunnel drops packets silently — but the OS still hands us
+     * The blackhole tunnel drops packets silently - but the OS still hands us
      * the byte stream on the interface fd. By actively READING that stream we
      * can count connection attempts a blocked app makes ("distractions
      * intercepted") and then discard the payload (strict zero-data privacy:
      * we never inspect, log, or store the bytes).
      *
      * CONNECTION HEURISTIC (Phase 4 counter refinement):
-     * The tunnel fd is ONE multiplexed byte stream — a single TCP connection's
+     * The tunnel fd is ONE multiplexed byte stream - a single TCP connection's
      * handshake + retries can produce many reads within milliseconds. Counting
      * every read inflates the metric (one background sync = dozens of "pings").
      * Instead we count a connection attempt only on a NEW burst: the first
@@ -491,15 +491,15 @@ class FocusVpnService : VpnService() {
         readerScope = scope
         scope.launch {
             val input = FileInputStream(fd.fileDescriptor)
-            val buffer = ByteArray(32_767) // 32 KB — typical max UDP/TCP segment
+            val buffer = ByteArray(32_767) // 32 KB - typical max UDP/TCP segment
             var lastReadAt = 0L
             AppLog.d("packet reader started")
             try {
                 while (shouldRun) {
                     val read = input.read(buffer)
                     if (read == -1) {
-                        // EOF — tunnel closed (teardown or revoke). Exit cleanly.
-                        AppLog.d("packet reader: EOF (tunnel closed) — exiting")
+                        // EOF - tunnel closed (teardown or revoke). Exit cleanly.
+                        AppLog.d("packet reader: EOF (tunnel closed) - exiting")
                         break
                     }
                     if (read > 0) {
@@ -520,7 +520,7 @@ class FocusVpnService : VpnService() {
                     // read == 0 is rare on a FileInputStream; just loop.
                 }
             } catch (e: Exception) {
-                // fd closed underneath us (teardown) — expected, not an error.
+                // fd closed underneath us (teardown) - expected, not an error.
                 AppLog.d("packet reader stopped: ${e.message}")
             } finally {
                 try { input.close() } catch (_: Exception) {}
@@ -541,7 +541,7 @@ class FocusVpnService : VpnService() {
      * it for the Telemetry Console (flushed to Room in batches).
      *
      * WHY ROUND-ROBIN: the blackhole tunnel drops packets silently and the
-     * reader sees only the raw byte stream — parsing IP headers to learn WHICH
+     * reader sees only the raw byte stream - parsing IP headers to learn WHICH
      * app sent a packet would leak per-app usage (a privacy violation). So we
      * rotate attribution across the blocked apps. This is a privacy-correct
      * proxy for "which apps are pulling the user in": it reflects aggregate
@@ -573,7 +573,7 @@ class FocusVpnService : VpnService() {
                 delay(FLUSH_INTERVAL_MS)
                 flushInterceptBuffer()
             }
-            // Final drain on shutdown — don't lose the tail of the session.
+            // Final drain on shutdown - don't lose the tail of the session.
             flushInterceptBuffer()
             AppLog.d("intercept flusher exited")
         }
@@ -612,7 +612,7 @@ class FocusVpnService : VpnService() {
      */
     private fun refreshRules() {
         if (!isShieldRunning) {
-            AppLog.w("refreshRules: shield not running — no-op (panel should only send this while ON)")
+            AppLog.w("refreshRules: shield not running - no-op (panel should only send this while ON)")
             return
         }
         serviceScope.launch {
@@ -651,13 +651,13 @@ class FocusVpnService : VpnService() {
                 return@launch
             }
             interfaceFd = fd
-            AppLog.d("refreshRules: tunnel hot-swapped — ${packages.size} apps blackholed. fd=$fd")
+            AppLog.d("refreshRules: tunnel hot-swapped - ${packages.size} apps blackholed. fd=$fd")
         }
     }
 
     /**
      * Read a profile's blocked apps. Returns a pair of (package names, Room IDs)
-     * — the names build the tunnel, the IDs drive round-robin deflected-ping
+     * - the names build the tunnel, the IDs drive round-robin deflected-ping
      * attribution.
      */
     private fun readBlockedApps(profileId: Long): Pair<List<String>, List<Long>> {
@@ -678,7 +678,7 @@ class FocusVpnService : VpnService() {
         AppLog.d("readBlockedApps: profile='${profile.name}' (id=${profile.id}) → ${apps.size} apps")
         // Capture the mode name for the notification HUD.
         profileName = profile.name.ifBlank { "Focus" }
-        // (package names, Room IDs) — same order, so the reader can index both
+        // (package names, Room IDs) - same order, so the reader can index both
         // with the same round-robin cursor.
         return apps.map { it.packageName } to apps.map { it.id }
     }
@@ -713,7 +713,7 @@ class FocusVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         // Distinct request code (2) so this never coalesces with the toggle's
-        // stop intent (request code 1) — that coalescing is why "End session"
+        // stop intent (request code 1) - that coalescing is why "End session"
         // from the notification sometimes did nothing.
         val stopIntent = PendingIntent.getService(
             this, 2,
@@ -789,8 +789,8 @@ class FocusVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        AppLog.d("FocusVpnService.onDestroy — Shield OFF, releasing tunnel (fd=${interfaceFd != null}, wasRunning=$isShieldRunning)")
-        // Full deterministic cleanup (idempotent — safe if teardown() already ran).
+        AppLog.d("FocusVpnService.onDestroy - Shield OFF, releasing tunnel (fd=${interfaceFd != null}, wasRunning=$isShieldRunning)")
+        // Full deterministic cleanup (idempotent - safe if teardown() already ran).
         shouldRun = false
         isShieldRunning = false
         serviceScope.cancel()
@@ -821,13 +821,13 @@ class FocusVpnService : VpnService() {
         } catch (e: Exception) {
             AppLog.e("cancel notification failed", e)
         }
-        AppLog.d("FocusVpnService.onDestroy COMPLETE — isShieldRunning=false")
+        AppLog.d("FocusVpnService.onDestroy COMPLETE - isShieldRunning=false")
         super.onDestroy()
     }
 
     /** Called by the system if the VPN is revoked (e.g. user disables it in settings). */
     override fun onRevoke() {
-        AppLog.w("VPN revoked by system (onRevoke) — teardown")
+        AppLog.w("VPN revoked by system (onRevoke) - teardown")
         teardown()
     }
 }

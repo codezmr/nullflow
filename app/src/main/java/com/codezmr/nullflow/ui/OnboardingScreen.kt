@@ -77,14 +77,14 @@ private val NeonCyan = Color(0xFF00E5FF)
 private val StarkWhite = Color(0xFFF2F4F8)
 
 /**
- * First-launch onboarding — a 3-step horizontal pager.
+ * First-launch onboarding - a 3-step horizontal pager.
  *
  * One cognitive decision per screen:
  *  - Step 1 "The Hook": value proposition only. Continue.
  *  - Step 2 "Arm the Shield": mandatory permissions (VPN gates Continue;
  *    Notifications is required-for-timer but skippable).
  *  - Step 3 "Seamless Focus": optional enhancements (battery limits,
- *    Quick Settings tile). Finish Setup — always available.
+ *    Quick Settings tile). Finish Setup - always available.
  *
  * No marketing cards, no tip carousel, no buried CTA: the action button
  * lives at the bottom of every page.
@@ -134,7 +134,7 @@ fun OnboardingScreen(
         }
     }
 
-    // Battery-optimization settings screen (no permission prompt — the user
+    // Battery-optimization settings screen (no permission prompt - the user
     // flips the switch themselves in the system UI). Re-check on return.
     val batteryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -184,7 +184,7 @@ fun OnboardingScreen(
 
     // ---- Swipe guard: HARD block. While the user is on page 1 (Permissions)
     // and the VPN permission is NOT granted, disable all pager swiping. The
-    // user must tap "Enable Local Shield" and grant it to proceed — swiping
+    // user must tap "Enable Local Shield" and grant it to proceed - swiping
     // left/right cannot bypass the mandatory permission gate.
     //
     // (A snap-back via scrollToPage is NOT enough: the swipe gesture completes
@@ -312,7 +312,7 @@ fun OnboardingScreen(
                 )
             }
 
-            // Developer signature — absolute bottom, beneath the CTA.
+            // Developer signature - absolute bottom, beneath the CTA.
             Spacer(Modifier.height(14.dp))
             Text(
                 text = "Crafted by CodeZMR",
@@ -326,7 +326,7 @@ fun OnboardingScreen(
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 — The Hook
+// Step 1 - The Hook
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -499,7 +499,7 @@ private fun SonarHero() {
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — Mandatory Permissions (The Engine)
+// Step 2 - Mandatory Permissions (The Engine)
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -559,7 +559,7 @@ private fun PermissionsPage(
 }
 
 // ---------------------------------------------------------------------------
-// Step 3 — Optional Enhancements (Bulletproofing)
+// Step 3 - Optional Enhancements (Bulletproofing)
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -758,7 +758,7 @@ private fun OnboardingActionButton(
 }
 
 // ---------------------------------------------------------------------------
-// Ambient glow — soft radial gradients for premium depth (non-interactive)
+// Ambient glow - soft radial gradients for premium depth (non-interactive)
 // ---------------------------------------------------------------------------
 
 @Composable

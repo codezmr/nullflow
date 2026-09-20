@@ -53,7 +53,7 @@ private val CreateMuted = Color(0xFF808080)
  * Full-screen "Create Mode" route (Scenario A).
  *
  * Replaces the old nested bottom-sheet create flow. Tapping "Create your first
- * mode" (or "New Mode" in the manager) navigates here — a standard full-screen
+ * mode" (or "New Mode" in the manager) navigates here - a standard full-screen
  * window where the keyboard opens natively and reliably (no modal-window IME
  * bugs).
  *
@@ -143,7 +143,7 @@ fun CreateModeScreen(
         scope.launch {
             withContext(Dispatchers.IO) {
                 try {
-                    // Name may have changed since creation — sync it.
+                    // Name may have changed since creation - sync it.
                     dao.renameProfile(id, trimmed)
                     // Make this the active mode so the shield uses it immediately.
                     dao.clearActive()

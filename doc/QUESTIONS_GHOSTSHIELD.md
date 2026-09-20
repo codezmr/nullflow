@@ -1,4 +1,4 @@
-# GhostShield — Open Questions (answer these before we build)
+# GhostShield - Open Questions (answer these before we build)
 
 Zamir, I verified the codebase before asking. Here's what I found and what I
 need you to decide. **Short answers are fine** (e.g. "Q1: yes, restart").
@@ -7,7 +7,7 @@ need you to decide. **Short answers are fine** (e.g. "Q1: yes, restart").
 
 ## 🔴 Blocking (must answer)
 
-### Q1. Hot-swapping the tunnel is NOT possible in place — how do you want it?
+### Q1. Hot-swapping the tunnel is NOT possible in place - how do you want it?
 Android's `VpnService` tunnel **cannot be edited after `establish()`**. To change
 which apps are blocked, the only correct way is: **close the old tunnel fd →
 re-`establish()` a new one**. The foreground service + notification stay up the
@@ -26,7 +26,7 @@ re-created.
 Right now the shield is OFF (no tunnel). User taps "Gym Mode" in the panel.
 
 - **Option A (recommended):** Just mark "Gym Mode" active in Room. Do **NOT**
-  start the shield — the user still has to flip the master switch ON.
+  start the shield - the user still has to flip the master switch ON.
 - **Option B:** Mark it active **and** auto-start the shield immediately.
 
 **Which one?**
@@ -36,7 +36,7 @@ Your manifest snippet references `android:icon="@drawable/ic_hero_toggle"`, but
 that drawable isn't in the project (only `ic_launcher_foreground.png` exists).
 
 - **Option A (recommended):** I create a simple vector drawable
-  (`ic_hero_toggle.xml`) — a circle + slash (matches the "null-ring" brand mark).
+  (`ic_hero_toggle.xml`) - a circle + slash (matches the "null-ring" brand mark).
 - **Option B:** You'll provide the icon file.
 - **Option C:** Reuse the existing `ic_launcher_foreground`.
 
@@ -63,7 +63,7 @@ tile, do we:
   "Gym Mode" session. (Keeps stats accurate per profile.)
 - **Alternative:** Keep one continuous session, just change which apps are blocked.
 
-### Q6. Tile icon — static or dynamic?
+### Q6. Tile icon - static or dynamic?
 - **Default (recommended):** One static icon; the tile just changes color
   (blue glow) when active. Simpler.
 - **Alternative:** Two icon variants (off = grey, on = blue). Looks nicer but
@@ -71,10 +71,10 @@ tile, do we:
 
 ### Q7. Should the tile also show up / behave if the app was never opened?
 The tile is always available once the app is installed (that's how QS tiles
-work). No action needed — just confirming you're aware the tile appears in the
+work). No action needed - just confirming you're aware the tile appears in the
 "edit tiles" list automatically.
 
-### Q8. Panel master switch vs. main app hero toggle — same source of truth?
+### Q8. Panel master switch vs. main app hero toggle - same source of truth?
 **Default (recommended):** Both read the same Room state (`activeProfile` +
 `runningSession`) and both drive the same `FocusVpnService`. They stay in sync
 automatically. Confirming this is what you want.

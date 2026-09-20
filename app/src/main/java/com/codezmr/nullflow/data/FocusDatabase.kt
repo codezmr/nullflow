@@ -23,7 +23,7 @@ abstract class FocusDatabase : RoomDatabase() {
         /**
          * v4 → v5: add the endReason column to focus_sessions (Strict Mode
          * session accounting). Existing rows get NULL (they ended before the
-         * concept existed). Non-destructive — user history is preserved.
+         * concept existed). Non-destructive - user history is preserved.
          */
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {

@@ -1,4 +1,4 @@
-# NullFlow — Session State
+# NullFlow - Session State
 
 > **Read this first to resume.** Last updated: 2026-09-05.
 > Goal: per-app internet kill-switch ("selective Offline Switch") via a local
@@ -11,33 +11,33 @@
 > Discuss + finish all code changes, THEN ask "build or not?". Wait for the go-ahead.
 >
 > 🔒 **GIT WORKFLOW:** public GitHub remote (`github.com/codezmr/nullflow`).
-> **NEVER touch `master`** — work on feature branches (currently `dev`).
-> **ALWAYS ask before commit/push. ALWAYS open an MR and hand the link over —
+> **NEVER touch `master`** - work on feature branches (currently `dev`).
+> **ALWAYS ask before commit/push. ALWAYS open an MR and hand the link over -
 > never merge it yourself.** Full rules in `GIT_INSTRUCTIONS.md`.
 > Never commit: `local.properties`, `.gradle/`, `build/`, `*.apk`, `*.aab`, `.weave/`.
 
 ---
 
-## ✅ Current Status: BUILT — Focus Telemetry Console (live interception data)
+## ✅ Current Status: BUILT - Focus Telemetry Console (live interception data)
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):**
 `NullFlow.apk` (32 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 **Committed** as `6e5c729` (14 files, +948/−468). Working tree clean.
 
 ### What changed (this round)
-The basic stats view is replaced by a **Focus Telemetry Console** — a
+The basic stats view is replaced by a **Focus Telemetry Console** - a
 cybersecurity-style observability hub built STRICTLY from live Room data
 (every pixel = a real byte dropped by the VPN; zero mock data).
 
 1. **Data layer** (Room **v2 → v3**, `fallbackToDestructiveMigration`):
-   - `data/InterceptLog.kt` (NEW) — entity `intercept_logs(id AutoGenerate,
+   - `data/InterceptLog.kt` (NEW) - entity `intercept_logs(id AutoGenerate,
      packageName, timestamp)`, indexed on `timestamp` + `packageName`.
-   - `data/AppInterceptStats.kt` (NEW) — `(packageName, interceptCount)`.
-   - `data/DailyFocusStats.kt` (NEW) — `(dayStart, focusMs, interceptCount)`.
-   - `data/PeakHourStats.kt` (NEW) — `(hourOfDay, cnt)`.
-   - `data/BlockedApp.kt` — **removed `deflectedCount`** (replaced by the
+   - `data/AppInterceptStats.kt` (NEW) - `(packageName, interceptCount)`.
+   - `data/DailyFocusStats.kt` (NEW) - `(dayStart, focusMs, interceptCount)`.
+   - `data/PeakHourStats.kt` (NEW) - `(hourOfDay, cnt)`.
+   - `data/BlockedApp.kt` - **removed `deflectedCount`** (replaced by the
      intercept log; the old per-app counter column is dead).
-   - `data/FocusDao.kt` — replaced the radar queries with:
+   - `data/FocusDao.kt` - replaced the radar queries with:
      - `getInterceptionsByApp(limit=5)` → `SELECT packageName, COUNT(id) ...
        GROUP BY packageName ORDER BY interceptCount DESC LIMIT :limit`
      - `getTotalIntercepts()` → `SELECT COUNT(id) FROM intercept_logs`
@@ -45,9 +45,9 @@ cybersecurity-style observability hub built STRICTLY from live Room data
        'localtime')` grouped, top 1 (the "Peak Focus Time" metric)
      - `getDailyTelemetry(dayStart)` → 7-row day-series (UNION ALL generator)
        joining focus-session ms + intercept counts per day (heatmap)
-     - `insertInterceptLogs(List)` — batch insert
-   - `data/FocusDatabase.kt` — v3, registered `InterceptLog`.
-2. **Service layer** (`vpn/FocusVpnService.kt`) — **batched live packet logging**:
+     - `insertInterceptLogs(List)` - batch insert
+   - `data/FocusDatabase.kt` - v3, registered `InterceptLog`.
+2. **Service layer** (`vpn/FocusVpnService.kt`) - **batched live packet logging**:
    - Packet reader now calls `bufferDeflectedPing()`: round-robin attribution
      (same privacy-correct scheme, now keyed by **package name**) → lock-free
      `ConcurrentLinkedQueue` enqueue (O(1) on the hot path).
@@ -56,15 +56,15 @@ cybersecurity-style observability hub built STRICTLY from live Room data
      teardown so the session tail isn't lost. No per-packet disk I/O.
    - `blockedPackages` (parallel to `blockedAppIds`) stamps the package name
      onto each buffered `InterceptLog`.
-3. **UI layer** (`ui/MainScreen.kt`) — **Telemetry Console** (inactive state):
+3. **UI layer** (`ui/MainScreen.kt`) - **Telemetry Console** (inactive state):
    - **Deleted `ui/FocusRadarGraph.kt`** (the hexagonal radar is gone).
    - **Telemetry header:** 3 glassmorphic metric cards (`#12151C` surface,
-     `#222733` border) — **Total Uptime** (all-time focus), **Threats
+     `#222733` border) - **Total Uptime** (all-time focus), **Threats
      Neutralized** (total intercepts), **Peak Focus Time** (e.g. "09:00 AM").
    - **Interception donut:** thick-ringed `Canvas` chart, top 3 apps in
      Cyan `#00E5FF` / Purple `#B44CFF` / Electric Blue `#4F8CFF`, animated
      sweep-in, center "DROPPED" total readout.
-   - **Threat ledger:** `LazyColumn` of top 5 — app icon
+   - **Threat ledger:** `LazyColumn` of top 5 - app icon
      (`rememberAppIconPainter`), resolved app label, exact `N×` count,
      `LinearProgressIndicator` scaled to the top app's count.
    - **7-day activity heatmap:** 7 rounded boxes, color-lerped `#1A1D24` →
@@ -74,8 +74,8 @@ cybersecurity-style observability hub built STRICTLY from live Room data
      0 intercepts (no 0% pie, no crash).
    - Dossier share now fed by `getTotalIntercepts()` (live).
 
-### Assumptions (documented — no interactive channel back to Zamir)
-1. **Package attribution:** the tunnel fd yields only a raw byte stream — the
+### Assumptions (documented - no interactive channel back to Zamir)
+1. **Package attribution:** the tunnel fd yields only a raw byte stream - the
    OS never says which app sent a packet (parsing IP headers would leak
    per-app usage). Kept the existing **round-robin** attribution across the
    shielded packages, now stamped per-package into `InterceptLog`.
@@ -84,7 +84,7 @@ cybersecurity-style observability hub built STRICTLY from live Room data
 3. **Heatmap day boundaries** = local midnight; the DAO always returns exactly
    7 rows (zero-filled), so no client-side gap-filling.
 4. DB v3 with destructive migration (consistent with the project's existing
-   migration strategy — existing users lose old data on upgrade).
+   migration strategy - existing users lose old data on upgrade).
 
 ### ⚠️ Still to verify on device (after install)
 - Inactive screen: 3 metric cards + donut + ledger + heatmap render (no
@@ -100,18 +100,18 @@ cybersecurity-style observability hub built STRICTLY from live Room data
 
 ---
 
-## ✅ Previous: BUILT — UI Polish, Layout Anchoring & Copy Enforcement
+## ✅ Previous: BUILT - UI Polish, Layout Anchoring & Copy Enforcement
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero warnings):**
 `NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### What changed (this round — approved by Zamir)
+### What changed (this round - approved by Zamir)
 1. **Layout Anchoring** (`MainScreen.kt`): restructured the root layout so the
    bottom dashboard (Radar + Stats) is **permanently pinned** to the bottom edge.
    - Top: `HudHeader` (fixed height).
    - Center: `Column(weight(1f))` containing Hero Toggle + App Icons (absorbs
      all remaining space, content centered vertically).
-   - Bottom: `StatsRow` / `CommandCenter` (NO weight — anchored).
+   - Bottom: `StatsRow` / `CommandCenter` (NO weight - anchored).
    - Radar reduced from 280dp → 220dp to keep the dashboard compact.
 2. **Ghost Radar Nodes** (`FocusRadarGraph.kt`): added **text labels** (app
    names, truncated to 12 chars) at each data vertex. The floating scrub label
@@ -127,7 +127,7 @@ cybersecurity-style observability hub built STRICTLY from live Room data
    button height 54dp → **56dp**. Both now match (56dp / 16dp).
 6. **DossierGenerator Crash Fix** (`DossierGenerator.kt`): replaced the
    off-screen `ComposeView` (which crashed with "Cannot locate windowRecomposer")
-   with **pure Android Canvas drawing**. No Compose dependency — renders the
+   with **pure Android Canvas drawing**. No Compose dependency - renders the
    9:16 share card directly to a Bitmap.
 
 ### ⚠️ Still to verify on device (after build)
@@ -142,12 +142,12 @@ cybersecurity-style observability hub built STRICTLY from live Room data
 
 ---
 
-## ✅ Previous: BUILT — Tactical HUD Header + Exit Dialog + Icon Fix
+## ✅ Previous: BUILT - Tactical HUD Header + Exit Dialog + Icon Fix
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero warnings):**
 `NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### What changed (this round — approved by Zamir)
+### What changed (this round - approved by Zamir)
 1. **Tactical HUD Header** (`MainScreen.kt`): replaced the centered "NullFlow"
    + tagline with a top-left asymmetrical HUD:
    - **"NULLFLOW"** all-caps, `FontWeight.Black`, `letterSpacing = 2.sp`, 22sp.
@@ -159,7 +159,7 @@ cybersecurity-style observability hub built STRICTLY from live Room data
    - 40dp guaranteed min gap to the Hero Switch.
 2. **Exit Dialog** (`MainActivity.kt`): "Minimize" → **"Exit"**. On Exit: sends
    `ACTION_STOP` to `FocusVpnService` (stops shield + ends session + cleans Room +
-   removes notification — idempotent), then `finishAffinity()` to close the app
+   removes notification - idempotent), then `finishAffinity()` to close the app
    completely. Rationale: "Minimize" made no sense (user can just switch apps).
 3. **App Picker Icon Placeholder** (`AppPickerSheet.kt` `TactileAppCard`): added a
    visible 40dp placeholder circle BEHIND the async-loaded icon. Root cause:
@@ -177,12 +177,12 @@ cybersecurity-style observability hub built STRICTLY from live Room data
 
 ---
 
-## ✅ Previous: BUILT — Welcome Screen "Initiation Sequence"
+## ✅ Previous: BUILT - Welcome Screen "Initiation Sequence"
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`, zero new warnings):**
 `NullFlow.apk` (31 MB) at `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### What changed (this round — approved by Zamir)
+### What changed (this round - approved by Zamir)
 The onboarding screen is now an "Initiation Sequence": elite copy, glowing
 permission states, and a tactile `SwipeToArmSlider` replacing the old button.
 
@@ -211,14 +211,14 @@ permission states, and a tactile `SwipeToArmSlider` replacing the old button.
      `[0, trackWidth - thumbWidth - padding]` (measured via
      `onGloballyPositioned` + `LocalDensity`).
    - **Detent-based haptics**: `TextHandleMove` every ~15% of travel (not every
-     frame — avoids haptic machine-gun).
+     frame - avoids haptic machine-gun).
    - **90% threshold**: heavy `VibrationEffect.createWaveform` thud (THUD/TICK/
      THUD pattern), thumb snaps to end, `onArmed()` → `markOnboarded()` +
      `onEnter()`.
    - `Haptics.vibratorFor(context)` exposed (new public method) for the custom
      waveform.
    - ⚠️ **API note:** `VibrationEffect.Composition` is package-private (not
-     accessible to app code) — used public `createWaveform()` instead (closest
+     accessible to app code) - used public `createWaveform()` instead (closest
      equivalent).
 
 ### ⚠️ Still to verify on device (Motorola Edge 40 / Android 15 = API 35)
@@ -240,22 +240,22 @@ permission states, and a tactile `SwipeToArmSlider` replacing the old button.
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### What changed (this round — approved by Zamir)
+### What changed (this round - approved by Zamir)
 The inactive shield state (Main Screen) is now a **Premium Analytics Command
 Center** with a custom-drawn radar + a 1-tap shareable dossier.
 
 1. **Per-app interception tracking** (data layer):
    - `BlockedApp.deflectedCount: Long` (new column, DB **v1 → v2**,
      `fallbackToDestructiveMigration`).
-   - `FocusDao.observeTopIntercepted(limit)` — top-N apps by deflectedCount.
-   - `FocusDao.incrementDeflected(id, delta)` — atomic increment.
-   - `FocusDao.observeTotalDeflected()` — SUM across all apps (for the dossier).
+   - `FocusDao.observeTopIntercepted(limit)` - top-N apps by deflectedCount.
+   - `FocusDao.incrementDeflected(id, delta)` - atomic increment.
+   - `FocusDao.observeTotalDeflected()` - SUM across all apps (for the dossier).
 2. **Round-robin attribution** (`FocusVpnService.kt`): the packet reader now
    attributes each deflected ping to a blocked app in rotation and persists it
    to Room. `readBlockedPackages` → `readBlockedApps` (returns packages + Room
    IDs). `blockedAppIds` + `attributionCursor` (AtomicInteger) track rotation.
    - **Privacy note:** the tunnel drops packets silently and the reader sees
-     only the raw byte stream — parsing IP headers to learn WHICH app sent a
+     only the raw byte stream - parsing IP headers to learn WHICH app sent a
      packet would leak per-app usage. Round-robin is the privacy-correct proxy.
 3. **Distraction Radar** (`ui/FocusRadarGraph.kt`, NEW): hexagonal `Canvas`
    graph. Base web (3 concentric hexagons + spokes, `#1E222B`), data polygon
@@ -268,7 +268,7 @@ Center** with a custom-drawn radar + a 1-tap shareable dossier.
      total pings deflected, session count, glassmorphic gradient bg, date.
    - Captured via off-screen `ComposeView` + `View.drawToBitmap` on
      `Dispatchers.IO`, saved to `cacheDir/nullflow_dossier.png`.
-   - **ZERO-LEAK:** only aggregate stats + brand — no app/package names.
+   - **ZERO-LEAK:** only aggregate stats + brand - no app/package names.
    - `DossierShare.share()` → `FileProvider.getUriForFile` + `ACTION_SEND`
      (`image/png`, `FLAG_GRANT_READ_URI_PERMISSION`).
 5. **FileProvider** (`AndroidManifest.xml` + `res/xml/file_paths.xml`):
@@ -295,9 +295,9 @@ Center** with a custom-drawn radar + a 1-tap shareable dossier.
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### What changed (this round — approved by Zamir)
+### What changed (this round - approved by Zamir)
 1. **1-tap QS tile pinning** (`MainActivity.kt`): new public
-   `requestAddQsTile(onResult: (Boolean) -> Unit)` — gated behind
+   `requestAddQsTile(onResult: (Boolean) -> Unit)` - gated behind
    `Build.VERSION.SDK_INT >= TIRAMISU` (33). Uses
    `StatusBarManager.requestAddTileService(ComponentName, "GhostShield",
    Icon, mainExecutor, Consumer<Int>)`. Callback result code 0 = added,
@@ -328,9 +328,9 @@ Center** with a custom-drawn radar + a 1-tap shareable dossier.
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### What changed (this round — approved by Zamir, Option A)
+### What changed (this round - approved by Zamir, Option A)
 1. **Packet interceptor** (`FocusVpnService.kt`): new `deflectedPings`
-   (`AtomicInteger`) + `startPacketReader(fd)` — a dedicated IO coroutine reads
+   (`AtomicInteger`) + `startPacketReader(fd)` - a dedicated IO coroutine reads
    the tunnel's `FileInputStream` in a `while(shouldRun)` loop (32 KB buffer).
    Every successful read = one deflected attempt → increment counter. Payload is
    NEVER inspected/logged/stored (strict zero-data privacy). Reader runs on its
@@ -353,7 +353,7 @@ Center** with a custom-drawn radar + a 1-tap shareable dossier.
 
 ### ⚠️ Still to verify on device (Motorola Edge 40 / Android 15)
 - Notification shows the custom HUD (shield + timer + cyan "X Pings Deflected"
-  + "End" button) — NOT the default text layout.
+  + "End" button) - NOT the default text layout.
 - Ping count increments in real time when a blocked app tries to connect.
 - "End" button stops the shield (tile + panel + notification all OFF).
 - HUD doesn't clip on the skinned OS (singleLine + ellipsize should prevent it).
@@ -366,7 +366,7 @@ Center** with a custom-drawn radar + a 1-tap shareable dossier.
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### What changed (this round — approved by Zamir)
+### What changed (this round - approved by Zamir)
 1. **Dropped predefined presets** (`AppPickerSheet.kt`): removed the
    "ONE-TAP PRESETS" section, `PresetChip` composable, and `togglePreset()`.
    Users now build their own modes by picking individual apps (trust: no opaque
@@ -376,12 +376,12 @@ Center** with a custom-drawn radar + a 1-tap shareable dossier.
    (or "No apps shielded" when 0). No more raw-list interpolation.
 3. **Unified app-icon loading** (`AppPickerSheet.kt`): `TactileAppCard` now
    takes `packageName` (not `Bitmap`) and renders via the proven
-   `rememberAppIconPainter` (async, cached, `BitmapPainter`) — same loader the
+   `rememberAppIconPainter` (async, cached, `BitmapPainter`) - same loader the
    QS tile panel uses. Replaced the deprecated `Image(bitmap = ...)` overload.
    Cleaned up now-unused imports (`Bitmap`, `asImageBitmap`, `LazyRow`).
 4. **Home-screen blocked-app icon row** (`MainScreen.kt`): beneath the active
    profile name, a scrollable `LazyRow` of the blocked apps' icons (24dp
-   circles, 8dp spacing) + right-edge gradient fade — mirrors the tile panel so
+   circles, 8dp spacing) + right-edge gradient fade - mirrors the tile panel so
    the user sees exactly what's shielded. New `BlockedAppIconRow` composable.
 
 ### ⚠️ Still to verify on device
@@ -398,30 +398,30 @@ Center** with a custom-drawn radar + a 1-tap shareable dossier.
 **Spec:** `doc/POLISH_SPEC.md` (all Q1–Q6 = Option A, approved by Zamir).
 
 ### What changed (all Option A)
-1. **Q1 — live notification timer:** `FocusVpnService.startTimerUpdates` now
+1. **Q1 - live notification timer:** `FocusVpnService.startTimerUpdates` now
    ticks every **1s** (`delay(1_000)`) instead of 30s.
-2. **Q2 — "End session" desync FIXED:** `FocusVpnService.teardown()` now calls
+2. **Q2 - "End session" desync FIXED:** `FocusVpnService.teardown()` now calls
    `clearRoomSession()` (ends running session + deactivates profile) on a fresh
    one-shot scope (serviceScope is already cancelled). EVERY stop path (app
    toggle / notification / QS tile) now keeps Room in lockstep → tile + panel
    can't disagree.
-3. **Q3 — QS onboarding gate:** `FocusTileService.onClick()` checks
+3. **Q3 - QS onboarding gate:** `FocusTileService.onClick()` checks
    `Settings.hasOnboarded`; if false → skips the panel and forces MainActivity
    (Welcome) + collapses. Also fixed `startActivityAndCollapse` to use a
-   **PendingIntent** (Intent form is disallowed on Android 15 — was crashing in
+   **PendingIntent** (Intent form is disallowed on Android 15 - was crashing in
    logs).
-4. **Q4 — "Focus Matrix" app picker (NO checkboxes):** `AppPickerSheet` fully
-   overhauled — sticky dark-glass search bar (filters all), one-tap Preset
+4. **Q4 - "Focus Matrix" app picker (NO checkboxes):** `AppPickerSheet` fully
+   overhauled - sticky dark-glass search bar (filters all), one-tap Preset
    Chips (💬 Social Noise / 🎬 Media Binge / 💬 Chat Drops, from
    `PackageManagerRepo.presets`), Tactile App Cards (unselected `#12151C` +
    `+ ADD` + desaturated icon; selected cyan glow `#00E5FF` + `🔒 SHIELDED` +
    icon halo), micro-spring press (0.96× bouncy) + `Haptics.thud` (40ms).
    Icons via built-in `BitmapPainter` (Coil/Accompanist unavailable offline).
    New `Haptics.thud()`.
-5. **Q5 — hero 3D extrusion:** `MainScreen.HeroToggle` now has a dark offset
+5. **Q5 - hero 3D extrusion:** `MainScreen.HeroToggle` now has a dark offset
    drop-shadow (bottom-right, ambient+spot black) + top-left light→dark bevel
    gradient + subtle white radial specular highlight. BreathingHero untouched.
-6. **Q6 — tile panel icon rows:** `TileFocusPanel` now shows a scrollable
+6. **Q6 - tile panel icon rows:** `TileFocusPanel` now shows a scrollable
    `LazyRow` of blocked-app icons (24dp circle, 8dp spacing) + right-edge
    gradient fade per mode. New `ProfileWithAppsRow` Room query
    (`observeProfilesWithApps`), `AppIconLoader.kt` (PackageManager icon loader
@@ -447,21 +447,21 @@ if anything misbehaves.
 **Status:** docs written, GhostShield committed; implementing the 6 items.
 
 ### Scope (all Option A)
-1. **Q1** — notification timer ticks every 1s (`delay(1_000)` in
+1. **Q1** - notification timer ticks every 1s (`delay(1_000)` in
    `FocusVpnService.startTimerUpdates`).
-2. **Q2** — fix "End session" desync: the service STOP handler also ends the
+2. **Q2** - fix "End session" desync: the service STOP handler also ends the
    Room session + deactivates the profile (so tile + panel agree).
-3. **Q3** — QS onboarding gate: `FocusTileService.onClick()` checks
+3. **Q3** - QS onboarding gate: `FocusTileService.onClick()` checks
    `Settings.hasOnboarded`; if false → launch MainActivity (Welcome) + collapse.
-4. **Q4 (UPGRADED → "Focus Matrix")** — app picker full overhaul, NO
+4. **Q4 (UPGRADED → "Focus Matrix")** - app picker full overhaul, NO
    checkboxes: sticky dark-glass search bar (filters all) + one-tap Preset
    Chips (💬 Social Noise / 🎬 Media Binge / 💬 Chat Drops) + Tactile App Cards
    (unselected `#12151C` + `+ ADD`; selected cyan glow `#00E5FF` + `🔒 SHIELDED`
    + icon halo) + micro-spring press (0.96× bouncy) + thud haptic. Icons via
    built-in `BitmapPainter` (Coil/Accompanist unavailable offline).
-5. **Q5** — `HeroToggle` (MainScreen only) gets a 3D extruded look (dark
+5. **Q5** - `HeroToggle` (MainScreen only) gets a 3D extruded look (dark
    bottom-right shadow + white top-left highlight). BreathingHero stays flat.
-6. **Q6** — tile panel: replace "N apps shielded" text with a `LazyRow` of
+6. **Q6** - tile panel: replace "N apps shielded" text with a `LazyRow` of
    blocked-app icons (24dp circle, 8dp spacing) + right-edge gradient fade.
    New `ProfileWithApps` Room query + PackageManager icon loader (cached).
 7. **Bonus (from logs):** `startActivityAndCollapse` must use a **PendingIntent**
@@ -471,12 +471,12 @@ if anything misbehaves.
 
 ---
 
-## ✅ Current Status: BUILT — GhostShield tile crash FIXED (decorView owner)
+## ✅ Current Status: BUILT - GhostShield tile crash FIXED (decorView owner)
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### 🐛 BUG FIXED: panel crashed on open — "ViewTreeLifecycleOwner not found"
+### 🐛 BUG FIXED: panel crashed on open - "ViewTreeLifecycleOwner not found"
 Device log (Motorola Edge 40, Android 15 / API 35): tapping the tile →
 `showDialog(FocusPanel)` → `IllegalStateException: ViewTreeLifecycleOwner not
 found from android.widget.FrameLayout{... app:id/container}`.
@@ -486,7 +486,7 @@ children. Compose's `WindowRecomposer` searches up to the **window root
 (decorView)** and throws if the tag isn't there. We had attached the owner to
 the **ComposeView**, which the search never reached.
 **Fix (`FocusTileService.showFocusPanel`):** attach the `PanelOwner` to the
-**`dialog.window.decorView`** (the root) via `setViewTree*Owner(owner)` — NOT to
+**`dialog.window.decorView`** (the root) via `setViewTree*Owner(owner)` - NOT to
 the ComposeView. Order: `setContentView` → attach owners to decorView →
 `showDialog`.
 > Note: Material 1.11.0's `BottomSheetDialog` is NOT a `ViewModelStoreOwner`
@@ -504,19 +504,19 @@ Share `Download/NullFlow/nullflow.log` if it still crashes.
 
 ---
 
-## ✅ Previous Status: BUILT — GhostShield Quick Settings Tile + Focus Panel
+## ✅ Previous Status: BUILT - GhostShield Quick Settings Tile + Focus Panel
 
 **Built 2026-09-05 (CLEAN build, `BUILD SUCCESSFUL`):** `NullFlow.apk` (31 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
 
-### 🆕 FEATURE: GhostShield — Quick Settings Tile + native Compose Focus Panel
+### 🆕 FEATURE: GhostShield - Quick Settings Tile + native Compose Focus Panel
 A QS tile ("GhostShield") in the notification shade. Tapping it opens a native
 `BottomSheetDialog` (Compose) over the current app to flip the shield + switch
 modes in ~0.5s without opening the main app. Spec: `doc/GHOSTSHIELD_SPEC.md`,
 questions/decisions: `doc/QUESTIONS_GHOSTSHIELD.md` (all answered "defaults").
 
 **New files:**
-- `tile/FocusTileService.kt` — the QS tile. `onStartListening()` reflects state
+- `tile/FocusTileService.kt` - the QS tile. `onStartListening()` reflects state
   (blue glow ACTIVE / grey INACTIVE) + reactively syncs from Room. `onClick()`
   → `showFocusPanel()` (handles `isLocked` via `unlockAndRun`). Panel =
   `BottomSheetDialog` + `ComposeView` rendering `TileFocusPanel`.
@@ -529,29 +529,29 @@ questions/decisions: `doc/QUESTIONS_GHOSTSHIELD.md` (all answered "defaults").
   - **QS overlay fix:** `behavior.state = STATE_EXPANDED` + `skipCollapsed = true`
     (avoids half-cut sheet). `startActivityAndCollapse` with
     `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP`.
-- `ui/tile/TileFocusPanel.kt` — Compose panel: master `Switch` (ON = start
+- `ui/tile/TileFocusPanel.kt` - Compose panel: master `Switch` (ON = start
   shield for active profile + insert session; OFF = stop + end session),
   "SELECT MODE" `LazyColumn` (RadioButton + name + "N apps shielded"),
   "+ Create / Edit Modes" → opens main app. All Room writes on `Dispatchers.IO`.
-- `data/ProfileWithCount.kt` — (id, name, isActive, appCount) for the panel.
-- `res/drawable/ic_hero_toggle.xml` — vector (circle + slash, the null-ring mark).
+- `data/ProfileWithCount.kt` - (id, name, isActive, appCount) for the panel.
+- `res/drawable/ic_hero_toggle.xml` - vector (circle + slash, the null-ring mark).
 
 **Modified files:**
-- `vpn/FocusVpnService.kt` — added `ACTION_STOP_SHIELD` + `ACTION_REFRESH_RULES`
+- `vpn/FocusVpnService.kt` - added `ACTION_STOP_SHIELD` + `ACTION_REFRESH_RULES`
   + companion intent builders (`startIntent`/`stopIntent`/`refreshIntent`).
   - **Hot-swap (Q1=A):** `refreshRules()` closes the old tunnel fd + re-`establish()`
     with the new active profile's packages, WITHOUT tearing down the foreground
     service/notification (no flicker). Tunnel can't be edited in place, so
     close+re-establish is the only correct way. Extracted `establishTunnel()`.
   - `ACTION_STOP_SHIELD` → `teardown()` (same as `ACTION_STOP`).
-- `data/FocusDao.kt` — added `observeProfilesWithAppCount(): Flow<List<ProfileWithCount>>`.
-- `build.gradle.kts` — added `com.google.android.material:material:1.11.0`
+- `data/FocusDao.kt` - added `observeProfilesWithAppCount(): Flow<List<ProfileWithCount>>`.
+- `build.gradle.kts` - added `com.google.android.material:material:1.11.0`
   (for `BottomSheetDialog`; cached, VPN-safe).
-- `AndroidManifest.xml` — registered `.tile.FocusTileService`
+- `AndroidManifest.xml` - registered `.tile.FocusTileService`
   (`BIND_QUICK_SETTINGS_TILE`, `QS_TILE` intent-filter, label "GhostShield").
-- `res/values/themes.xml` — `NullFlow_BottomSheet_Dialog`
+- `res/values/themes.xml` - `NullFlow_BottomSheet_Dialog`
   (parent `Theme.Material3.DayNight.BottomSheetDialog`, transparent + dim + floating).
-- `res/values/colors.xml` + `strings.xml` — tile tints + `tile_label`.
+- `res/values/colors.xml` + `strings.xml` - tile tints + `tile_label`.
 
 ### ⚠️ Still to verify on device
 - Add the "GhostShield" tile to the QS shade (edit tiles) → it appears.
@@ -569,7 +569,7 @@ Share `Download/NullFlow/nullflow.log` if the panel misbehaves (new `TilePanel:`
 
 ---
 
-## ✅ Previous Status: BUILT — deterministic teardown (lingering notif FIXED)
+## ✅ Previous Status: BUILT - deterministic teardown (lingering notif FIXED)
 
 **Built 2026-09-05 (commit `aec5ced`, CLEAN build):** `NullFlow.apk` (23 MB) at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
@@ -577,7 +577,7 @@ Share `Download/NullFlow/nullflow.log` if the panel misbehaves (new `TilePanel:`
 ### 🐛 BUG FIXED: notification + VPN icon lingered after OFF (service survived)
 Log showed: notification "End session" fired STOP #1, then toggle fired STOP #2
 + `endCurrentSession` cleared Room (UI → OFF), **but the service process
-survived** — its timer loop kept updating the notification ("00:30 · active")
+survived** - its timer loop kept updating the notification ("00:30 · active")
 after the UI said OFF.
 Root cause: `stopSelf()` (no arg) only stops the *last* start request. With
 multiple pending start requests (notification + toggle), the service lived on.
@@ -605,7 +605,7 @@ multiple pending start requests (notification + toggle), the service lived on.
 
 ---
 
-## ✅ Previous Status: BUILT — welcome screen redesigned (scrollable + premium)
+## ✅ Previous Status: BUILT - welcome screen redesigned (scrollable + premium)
 
 **Built 2026-09-03 (commit `3051837`):** `NullFlow.apk` (23 MB).
 
@@ -620,7 +620,7 @@ User feedback: "not scrollable" + "looks like text text only, make it premium".
   (was bare centered text).
 - **Feature cards**: the 3 "how it works" rows are now rich neumorphic cards
   (`FeatureCard`) with an icon chip (48dp rounded square) + title + description
-  (was bare `FeatureRow` text lines — removed).
+  (was bare `FeatureRow` text lines - removed).
 - **Section labels**: uppercase eyebrow labels ("HOW IT WORKS", "ONE-TIME SETUP")
   via `SectionLabel`.
 - (Carried) Breathing hero, rotating tip card, hidden granted perms, gatekeeper
@@ -636,7 +636,7 @@ Share `Download/NullFlow/nullflow.log` if anything misbehaves.
 
 ---
 
-## ✅ Previous Status: BUILT — back dialog + welcome polish + sticky-restart fix
+## ✅ Previous Status: BUILT - back dialog + welcome polish + sticky-restart fix
 
 **Built 2026-09-03 (commit `1149f21`):** `NullFlow.apk` (23 MB).
 
@@ -657,7 +657,7 @@ Pressing back (button OR gesture) shows **"Exit NullFlow?"** dialog with
 **Exit** / **Stay**. Wired via `OnBackPressedDispatcher.addCallback` in
 `MainActivity`.
 - **Exit** (was "Minimize"): sends `ACTION_STOP` to `FocusVpnService` (stops
-  shield + ends session + cleans Room + removes notification — idempotent),
+  shield + ends session + cleans Room + removes notification - idempotent),
   then `finishAffinity()` to close the app completely. Rationale: "Minimize"
   made no sense (the user can just switch apps); "Exit" fully tears down.
 - **Stay**: dismisses the dialog.
@@ -667,7 +667,7 @@ Pressing back (button OR gesture) shows **"Exit NullFlow?"** dialog with
   row is hidden entirely (returning users see a clean screen). "One-time setup"
   label only shows when something is still needed.
 - **3 feature rows** ("How it works"): Pick apps / One tap zero popups / Data
-  never moves — quiet icon + title + description.
+  never moves - quiet icon + title + description.
 - (Carried) Rotating tip card (30 lines, auto 6s + tap, TIP/TRICK/MOTIVATE).
 
 ### 🆕 Debug: notification/service lifecycle logging
@@ -686,7 +686,7 @@ Share `Download/NullFlow/nullflow.log` if anything misbehaves.
 
 ---
 
-## ✅ Previous Status: BUILT — OFF now fully cleans up (VPN icon + notif)
+## ✅ Previous Status: BUILT - OFF now fully cleans up (VPN icon + notif)
 
 **Built 2026-09-03 (commit `1ee1e86`):** `NullFlow.apk` (23 MB).
 
@@ -716,12 +716,12 @@ Share `Download/NullFlow/nullflow.log` if anything misbehaves.
 
 ---
 
-## ✅ Previous Status: BUILT — core flow WORKS + stale-state reconcile
+## ✅ Previous Status: BUILT - core flow WORKS + stale-state reconcile
 
 **Built 2026-09-03 (commit `939480c`):** `NullFlow.apk` (23 MB).
 
 ### ✅ CORE FLOW CONFIRMED WORKING (from device log)
-Pick apps → Done → toggle ON → **Shield ACTIVE — 2 apps blackholed** (no crash,
+Pick apps → Done → toggle ON → **Shield ACTIVE - 2 apps blackholed** (no crash,
 no profile loop). Toggle OFF → clean stop. The crash fix + profile fix both hold.
 
 ### 🐛 BUG FIXED: stale "ON" state after app kill/restart
@@ -730,7 +730,7 @@ Symptom: app killed while shield ON → on restart, UI showed `isActive=true`
 Root cause: Room session + active profile survived the process death, but the
 VPN service did not.
 **Fix:**
-- `FocusVpnService.isShieldRunning` (static `@Volatile`, private set) — true only
+- `FocusVpnService.isShieldRunning` (static `@Volatile`, private set) - true only
   while the tunnel is live in a running process; set true on establish, false in
   `onDestroy`. Resets to false on every fresh process start.
 - `MainActivity.onCreate`: if `!isShieldRunning` and a running session exists in
@@ -752,7 +752,7 @@ unless it becomes noisy.
 
 ---
 
-## ✅ Previous Status: BUILT — profile loop FIXED + Done bar in picker
+## ✅ Previous Status: BUILT - profile loop FIXED + Done bar in picker
 
 **Built 2026-09-03 (commit `79bc450`):** `NullFlow.apk` (23 MB).
 
@@ -785,7 +785,7 @@ OFF). Share `Download/NullFlow/nullflow.log` if anything misbehaves.
 
 ---
 
-## ✅ Previous Status: BUILT — crash FIXED + welcome screen + rotating tips
+## ✅ Previous Status: BUILT - crash FIXED + welcome screen + rotating tips
 
 **Built 2026-09-03 (commit `c47f867`):** `NullFlow.apk` (23 MB).
 
@@ -827,7 +827,7 @@ always satisfied, THEN decide to stay active or stop.
 
 ---
 
-## ✅ Previous Status: BUILT WITH LOGGING — debugging the ON/OFF crash
+## ✅ Previous Status: BUILT WITH LOGGING - debugging the ON/OFF crash
 
 **Built 2026-09-03 (commit `57e0ddb`):** `NullFlow.apk` (23 MB).
 Crash-proof logging (`AppLog.kt` → `Download/NullFlow/nullflow.log`) + crash
@@ -836,7 +836,7 @@ handler + full lifecycle logging. This build's log **confirmed** the
 
 ---
 
-## ✅ Previous Status: BUILT — `NullFlow.apk` (23 MB) ready for device test
+## ✅ Previous Status: BUILT - `NullFlow.apk` (23 MB) ready for device test
 
 **Built 2026-09-03:** `BUILD SUCCESSFUL`, APK 23 MB at
 `apps/NullFlow/app/build/outputs/apk/debug/NullFlow.apk`.
@@ -845,7 +845,7 @@ permissions VIBRATE / POST_NOTIFICATIONS / FOREGROUND_SERVICE(+_DATA_SYNC) /
 QUERY_ALL_PACKAGES. Working tree CLEAN (commit `c88c0fc`).
 
 > ⚠️ **Compose 1.6.1 (BOM 2024.02.00) gotchas hit this build:**
-> - `Modifier.shadow` uses `elevation: Dp` — NO `radius`, NO `ambientColor`/`spotColor` params.
+> - `Modifier.shadow` uses `elevation: Dp` - NO `radius`, NO `ambientColor`/`spotColor` params.
 > - `infiniteTransition.animateFloat` does NOT exist → use `Animatable` +
 >   `LaunchedEffect` ping-pong loop (`animateTo(1f)` / `animateTo(0f)` in `while(true)`).
 > - `Canvas` drawscope has NO `strokeWidth` property → use `N.dp.toPx()`.
@@ -855,17 +855,17 @@ QUERY_ALL_PACKAGES. Working tree CLEAN (commit `c88c0fc`).
 > - `Modifier.fillMaxSize().background(x)` on one line → "Overload resolution
 >   ambiguity" → split onto separate lines.
 
-**Next:** Device test — (1) onboarding: breathing hero, both checklist rows →
+**Next:** Device test - (1) onboarding: breathing hero, both checklist rows →
 neon checks, gatekeeper → Enter; (2) main: 1-tap toggle ON (no popups), bg dims,
 WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
 
 ---
 
-## ✅ Previous Status: ALL CODE DONE (Phases 1-4 + Onboarding) — AWAITING BUILD PERMISSION
+## ✅ Previous Status: ALL CODE DONE (Phases 1-4 + Onboarding) - AWAITING BUILD PERMISSION
 
 **Done so far:**
 - Local git repo initialized (no remote, ever).
-- `doc/APP_IDEA.md` — full app idea + branding + 5-phase architecture (read-only reference).
+- `doc/APP_IDEA.md` - full app idea + branding + 5-phase architecture (read-only reference).
 - Gradle wrapper copied from SnapTriage (Gradle 8.7, cached).
 - `local.properties` → `sdk.dir=/home/mohmmad/Android/Sdk`.
 - **Phase 1 COMPLETE:** root + app `build.gradle.kts` (compileSdk 34, minSdk 30,
@@ -873,7 +873,7 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
   `NullFlow.apk`), `settings.gradle.kts`, `gradle.properties`,
   `AndroidManifest.xml` (VIBRATE, POST_NOTIFICATIONS, FOREGROUND_SERVICE + _DATA_SYNC,
   QUERY_ALL_PACKAGES + FocusVpnService with BIND_VPN_SERVICE), res/
-  (strings, colors, themes, **provided NullFlow icon kit** — adaptive foreground PNG
+  (strings, colors, themes, **provided NullFlow icon kit** - adaptive foreground PNG
   + density mipmaps, background `#101014`).
 - **Phase 2 COMPLETE:** Room DB (`FocusProfile`, `BlockedApp`, `FocusSession`
   entities + `FocusDao` with CRUD + Flow emitters + `FocusDatabase`),
@@ -886,7 +886,7 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
   live session timer + stats + pre-prompt consent sheet), `AppPickerSheet`
   (ModalBottomSheet + LazyColumn + multi-select checkboxes), `MainActivity`
   (edge-to-edge, onboarding gate, wires DAO + picker sheet).
-- **ONBOARDING COMPLETE (Play-review required):** `OnboardingScreen` — neumorphic
+- **ONBOARDING COMPLETE (Play-review required):** `OnboardingScreen` - neumorphic
   dark aesthetic: BreathingHero (3D matte toggle + 4s icy-blue LED pulse),
   stark value-prop typography, "0 bytes" Halo anchor, two neumorphic tactile
   checklist rows (Notifications `POST_NOTIFICATIONS` + Local Shield
@@ -916,7 +916,7 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
     ├── settings.gradle.kts
     ├── gradle.properties
     ├── local.properties      ← sdk.dir=/home/mohmmad/Android/Sdk
-    ├── gradlew + gradle/wrapper/  ← Gradle 8.7 (COPIED from SnapTriage — do NOT change)
+    ├── gradlew + gradle/wrapper/  ← Gradle 8.7 (COPIED from SnapTriage - do NOT change)
     └── app/
         ├── build.gradle.kts  ← compileSdk 34, minSdk 30, compose, Room+KSP, coroutines
         └── src/main/
@@ -931,7 +931,7 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
 
 ---
 
-## 🧱 Tech Stack (LOCKED — see ../../ANDROID_BUILD_SETUP.md for why)
+## 🧱 Tech Stack (LOCKED - see ../../ANDROID_BUILD_SETUP.md for why)
 
 | Component | Version |
 |---|---|
@@ -945,7 +945,7 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
 | JDK | 17 (sourceCompat/jvmTarget) |
 | SDK | `~/Android/Sdk` (android-34, android-36) |
 
-**APK rename:** `app/build.gradle.kts` has an `android.applicationVariants.all { ... outputFileName = "NullFlow.apk" }` block (legacy API — `androidComponents.outputFileName` doesn't exist in AGP 8.5.2).
+**APK rename:** `app/build.gradle.kts` has an `android.applicationVariants.all { ... outputFileName = "NullFlow.apk" }` block (legacy API - `androidComponents.outputFileName` doesn't exist in AGP 8.5.2).
 
 ---
 
@@ -957,7 +957,7 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
    - `addAllowedApplication(pkg)` for each blocked package
    - `setBlocking(true)` → their packets are silently DROPPED
    - All other apps bypass the VPN → keep internet.
-2. **Never say "VPN" in UI** — call it "Local Privacy Shield" / "Focus Wall".
+2. **Never say "VPN" in UI** - call it "Local Privacy Shield" / "Focus Wall".
    Pre-prompt screen BEFORE the system consent dialog.
 3. **Haptics:** `VibrationEffect.createOneShot(50, 150)` touch-down,
    `createOneShot(100, 255)` on successful activation.
@@ -981,7 +981,7 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
 
 ## ⚠️ Known / Watch-out
 
-- **Git: LOCAL-ONLY.** NO remote — never add one, never push. Commit locally
+- **Git: LOCAL-ONLY.** NO remote - never add one, never push. Commit locally
   before big changes.
 - **VPN-gated:** `services.gradle.org` is dead over this VPN. Never bump the
   Gradle wrapper version.
@@ -990,10 +990,10 @@ WhatsApp single-tick; (3) OFF → internet back; (4) Edit apps sheet; (5) stats.
   - `Modifier.shadow` needs `import androidx.compose.ui.draw.shadow` AND uses
     `elevation: Dp` (not `radius`).
   - `slideInVertically`/`slideOutVertically` don't take `targetOffsetY`/
-    `initialOffsetY` lambda params — use `animationSpec` only.
-  - `align` is a `BoxScope`/`RowScope`/`ColumnScope` member — do NOT import
+    `initialOffsetY` lambda params - use `animationSpec` only.
+  - `align` is a `BoxScope`/`RowScope`/`ColumnScope` member - do NOT import
     `androidx.compose.foundation.layout.align`.
-- **QUERY_ALL_PACKAGES** is a Play Store scrutiny item — fine for sideloaded
+- **QUERY_ALL_PACKAGES** is a Play Store scrutiny item - fine for sideloaded
   APK; would need justification for Play release.
-- **VpnService.prepare()** returns null if already authorized — handle both
+- **VpnService.prepare()** returns null if already authorized - handle both
   cases in the consent flow.

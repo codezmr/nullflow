@@ -12,10 +12,10 @@ Thanks for your interest in contributing!
 ## Project structure
 
 - `app/src/main/java/com/codezmr/nullflow/`
-  - `vpn/` — VpnService, packet filtering
-  - `data/` — Room entities, DAO, database
-  - `ui/` — Compose screens and components
-  - `service/` — Foreground service
+  - `vpn/` - VpnService, packet filtering
+  - `data/` - Room entities, DAO, database
+  - `ui/` - Compose screens and components
+  - `service/` - Foreground service
 
 ## Guidelines
 
@@ -23,7 +23,7 @@ Thanks for your interest in contributing!
 - No new dependencies without discussion
 - All UI changes must work in the Quick Settings tile context (no Dialog/AlertDialog)
 - Log with `AppLog` (logcat only, tag `NullFlow`)
-- Keep the VPN tunnel local-only — no network calls from the app itself
+- Keep the VPN tunnel local-only - no network calls from the app itself
 
 ## Submitting changes
 

@@ -1,16 +1,16 @@
-# NullFlow — Architecture Polish & UX Improvements (Feature Spec)
+# NullFlow - Architecture Polish & UX Improvements (Feature Spec)
 
-> **Status:** APPROVED — all cross-questions answered "Option A / defaults".
+> **Status:** APPROVED - all cross-questions answered "Option A / defaults".
 > **Package:** `com.codezmr.nullflow`
 > **Companion decisions:** see inline notes; all Q1–Q6 = Option A.
 >
 > **⚠️ SUPERSEDED ITEMS (see §4 "Post-Polish Additions"):**
-> - §2.1 "One-Tap Preset Chips" — **REMOVED**. Users build their own modes by
+> - §2.1 "One-Tap Preset Chips" - **REMOVED**. Users build their own modes by
 >   picking individual apps (no opaque categories). `PackageManagerRepo.presets`
 >   deleted.
-> - §2.3 "Checkbox Accent" — **N/A** (checkboxes were replaced by Tactile App
+> - §2.3 "Checkbox Accent" - **N/A** (checkboxes were replaced by Tactile App
 >   Cards in §2.1b).
-> - §1.2 "Frozen Notification Timer" — **UPGRADED** to a full custom
+> - §1.2 "Frozen Notification Timer" - **UPGRADED** to a full custom
 >   `RemoteViews` HUD with a live "Pings Deflected" counter (see §4.1).
 
 ---
@@ -24,7 +24,7 @@ Welcome/Consent screen.
 (SharedPreferences) BEFORE showing the panel. If `false` → do NOT show the
 panel; launch `MainActivity` (which shows Welcome) and collapse the shade.
 - Use `Settings.get(context).hasOnboarded`.
-- Launch via `startActivityAndCollapse` with a **PendingIntent** (see 1.4 note —
+- Launch via `startActivityAndCollapse` with a **PendingIntent** (see 1.4 note -
   `startActivityAndCollapse(Intent)` is disallowed on Android 15).
 
 ### 1.2 Frozen Notification Timer (Q1 = A)
@@ -41,7 +41,7 @@ ended** and the profile is never deactivated. Result: tile (reads in-memory
 `isShieldRunning`) shows OFF, but the panel (reads Room `runningSession` +
 `activeProfile`) shows ON.
 **Fix:** Make "End session" go through the SAME full stop path as the app
-toggle — it must also end the Room session + deactivate the profile.
+toggle - it must also end the Room session + deactivate the profile.
 - Cleanest approach: the notification "End session" action should trigger the
   full stop (service teardown **and** Room cleanup). Since a `PendingIntent`
   from a notification can only target a service/broadcast/activity, the
@@ -51,7 +51,7 @@ toggle — it must also end the Room session + deactivate the profile.
 
 ### 1.4 `startActivityAndCollapse` PendingIntent (found in logs)
 **Problem:** `startActivityAndCollapse(Intent)` throws
-`UnsupportedOperationException` on Android 15 — it requires a **PendingIntent**.
+`UnsupportedOperationException` on Android 15 - it requires a **PendingIntent**.
 **Fix:** Build a `PendingIntent.getActivity(...)` and pass that to
 `startActivityAndCollapse(pendingIntent)`. Applies to both the onboarding gate
 (1.1) and the "+ Create / Edit Modes" action.
@@ -60,16 +60,16 @@ toggle — it must also end the Room session + deactivate the profile.
 
 ## 2. UI & Aesthetic Polish
 
-### 2.1 App Picker → "The Focus Matrix" (Q4 upgraded — NO checkboxes)
+### 2.1 App Picker → "The Focus Matrix" (Q4 upgraded - NO checkboxes)
 **File:** `ui/AppPickerSheet.kt` (full overhaul)
 Replaces the standard Material checkboxes with a high-end, futuristic
-"Focus Matrix". Two pillars (presets removed — see §4.2):
+"Focus Matrix". Two pillars (presets removed - see §4.2):
 
 **(a) Sticky search (top)**
 - **Sticky search:** `OutlinedTextField`, dark glass (`#141820` surface,
   `#00E5FF` cursor/focus border). Filters the ENTIRE unified list by label
   (case-insensitive).
-- ~~**Preset chips**~~ — **REMOVED** (users build their own modes by picking
+- ~~**Preset chips**~~ - **REMOVED** (users build their own modes by picking
   individual apps; no opaque categories). See §4.2.
 
 **(b) Tactile App Card (replaces the checkbox)**
@@ -82,7 +82,7 @@ Replaces the standard Material checkboxes with a high-end, futuristic
   (`spring(dampingRatio = MediumBouncy)`). Heavy thud haptic on tap
   (`VibrationEffect.createOneShot(40, DEFAULT_AMPLITUDE)`).
 - Icons rendered via `rememberAppIconPainter` (async, in-memory cached,
-  `BitmapPainter`) — the SAME loader the QS tile panel uses. **NOT**
+  `BitmapPainter`) - the SAME loader the QS tile panel uses. **NOT**
   Coil/Accompanist (not available offline). Replaced the deprecated
   `Image(bitmap = …)` overload.
 
@@ -92,11 +92,11 @@ Replaces the standard Material checkboxes with a high-end, futuristic
 - Keep the existing "Done · N apps selected" bar at the bottom.
 
 > NOTE: The earlier "Suggested cluster" idea is superseded by the Preset Chips
-> (same intent — quick access to high-distraction apps — but as one-tap
+> (same intent - quick access to high-distraction apps - but as one-tap
 > category toggles instead of a static group).
 
 ### 2.2 Neumorphic Hero Switch 3D (Q5 = A)
-**File:** `ui/MainScreen.kt` (`HeroToggle` only — NOT the onboarding
+**File:** `ui/MainScreen.kt` (`HeroToggle` only - NOT the onboarding
 `BreathingHero`, which stays flat/ethereal).
 - Add a dark, offset drop-shadow to the **bottom-right** and a subtle
   semi-transparent white highlight to the **top-left** for a 3D extruded
@@ -104,7 +104,7 @@ Replaces the standard Material checkboxes with a high-end, futuristic
 - Implement via layered `Modifier.shadow` / gradient overlays on the existing
   circular switch (keep current size + colors).
 
-### 2.3 Brand Consistency — Checkbox Accent
+### 2.3 Brand Consistency - Checkbox Accent
 **File:** `ui/AppPickerSheet.kt`
 - Override the default Material 3 blue on the app-picker checkboxes with the
   app's electric-cyan `#00E5FF` via `CheckboxDefaults.colors(checkedColor = …)`.
@@ -133,10 +133,10 @@ Replaces the standard Material checkboxes with a high-end, futuristic
 The blackhole tunnel drops packets silently, but the OS still hands us the byte
 stream on the interface fd. By actively READING that stream we count every
 connection attempt a blocked app makes ("pings deflected") and discard the
-payload (strict zero-data privacy — never inspected/logged/stored).
+payload (strict zero-data privacy - never inspected/logged/stored).
 
 - **Counter:** `deflectedPings` (`AtomicInteger`), reset to 0 per session.
-- **Reader:** `startPacketReader(fd)` — dedicated IO coroutine reads the tunnel
+- **Reader:** `startPacketReader(fd)` - dedicated IO coroutine reads the tunnel
   `FileInputStream` in a `while(shouldRun)` loop (32 KB buffer). Each successful
   read = one deflected attempt → increment. Runs on its own `readerScope` so
   hot-swaps restart it without killing the ticker. Cancelled on teardown +
@@ -152,7 +152,7 @@ payload (strict zero-data privacy — never inspected/logged/stored).
   live ping count.
 
 > **Caveat:** the reader counts I/O *reads*, not individual packets (a single
-> `read()` can return multiple packets). This is the privacy-correct tradeoff —
+> `read()` can return multiple packets). This is the privacy-correct tradeoff -
 > precise per-packet counting would require parsing IP headers (inspecting
 > payloads), which violates zero-data privacy.
 
@@ -167,7 +167,7 @@ payload (strict zero-data privacy — never inspected/logged/stored).
 ### 4.3 Home-Screen Blocked-App Icon Row
 **File:** `ui/MainScreen.kt`
 - Beneath the active profile name, a scrollable `LazyRow` of the blocked apps'
-  icons (24dp circles, 8dp spacing) + right-edge gradient fade — mirrors the QS
+  icons (24dp circles, 8dp spacing) + right-edge gradient fade - mirrors the QS
   tile panel so the user sees exactly what's shielded. New `BlockedAppIconRow`
   composable.
 
@@ -186,7 +186,7 @@ payload (strict zero-data privacy — never inspected/logged/stored).
     On success → flips to dimmed "✓ Added to Quick Settings" + haptic engage.
   - **API 30-32 fallback:** muted glassmorphic card with manual drag-and-drop
     instructions.
-  - **Optional** — never blocks onboarding.
+  - **Optional** - never blocks onboarding.
 
  ### 4.5 Zero-Warning Cleanup
 **File:** `ui/MainScreen.kt`
@@ -215,7 +215,7 @@ Replaced the centered "NullFlow" + tagline with a top-left asymmetrical HUD
 - "Minimize" → **"Exit"**. Rationale: "Minimize" made no sense (the user can
   just switch apps); "Exit" fully tears down.
 - On Exit: sends `ACTION_STOP` to `FocusVpnService` (stops shield + ends session
-  + cleans Room + removes notification — idempotent), then `finishAffinity()` to
+  + cleans Room + removes notification - idempotent), then `finishAffinity()` to
   close the app completely.
 - Dialog text: "This stops the shield and closes the app completely. Your focus
   data is saved on this phone."
@@ -237,9 +237,9 @@ Replaced the centered "NullFlow" + tagline with a top-left asymmetrical HUD
 **File:** `ui/MainScreen.kt`
 Restructured the root layout so the bottom dashboard is **permanently pinned**:
 - Top: `HudHeader` (fixed height, no weight).
-- Center: `Column(weight(1f))` — Hero Toggle + App Icons (absorbs all
+- Center: `Column(weight(1f))` - Hero Toggle + App Icons (absorbs all
   remaining space, content centered vertically).
-- Bottom: `StatsRow` / `CommandCenter` (NO weight — anchored to bottom edge).
+- Bottom: `StatsRow` / `CommandCenter` (NO weight - anchored to bottom edge).
 - Radar reduced from 280dp → 220dp to keep the dashboard compact.
 
 ### 6.2 Ghost Radar Nodes (FocusRadarGraph)
@@ -281,10 +281,10 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
 ## 7. Focus Telemetry Console (latest round)
 
 > Replaces the basic stats view with a cybersecurity-style observability hub.
-> **Strictly live data** — every pixel = a real byte dropped by the VPN. Zero
+> **Strictly live data** - every pixel = a real byte dropped by the VPN. Zero
 > mock data, zero hardcoded placeholders.
 
-### 7.1 Data Layer — `InterceptLog` entity + telemetry DAOs
+### 7.1 Data Layer - `InterceptLog` entity + telemetry DAOs
 **Files:** `data/InterceptLog.kt` (NEW), `data/AppInterceptStats.kt` (NEW),
 `data/DailyFocusStats.kt` (NEW), `data/PeakHourStats.kt` (NEW),
 `data/FocusDao.kt`, `data/FocusDatabase.kt`, `data/BlockedApp.kt`
@@ -292,7 +292,7 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
   timestamp)`, indexed on `timestamp` + `packageName`. One row per intercepted
   (blackholed) connection attempt.
 - **Room v2 → v3** (`fallbackToDestructiveMigration`).
-- **`BlockedApp.deflectedCount` REMOVED** — the per-app counter column is
+- **`BlockedApp.deflectedCount` REMOVED** - the per-app counter column is
   replaced by the intercept log (the old radar's data source is gone).
 - **New reactive DAO queries** (all `Flow`, run off the main thread):
   - `getInterceptionsByApp(limit=5)` →
@@ -307,21 +307,21 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
   - `getDailyTelemetry(dayStart)` → a 7-row day-series (UNION ALL generator
     `SELECT 0..6`) joining focus-session ms + intercept counts per day
     (local-midnight boundaries). Always returns exactly 7 rows (zero-filled).
-  - `insertInterceptLogs(List<InterceptLog>)` — batch insert.
+  - `insertInterceptLogs(List<InterceptLog>)` - batch insert.
 
-### 7.2 Service Layer — batched live packet logging
+### 7.2 Service Layer - batched live packet logging
 **File:** `vpn/FocusVpnService.kt`
 - The packet reader now calls `bufferDeflectedPing()`: round-robin attribution
   (same privacy-correct scheme as before, now keyed by **package name**) →
   enqueues an `InterceptLog` into a lock-free `ConcurrentLinkedQueue` (O(1) on
-  the hot path — no per-packet disk I/O).
-- **`startInterceptFlusher()`** — a dedicated IO coroutine drains the queue into
+  the hot path - no per-packet disk I/O).
+- **`startInterceptFlusher()`** - a dedicated IO coroutine drains the queue into
   ONE multi-row Room insert every **2s** (5000-row cap) + a final flush on
   teardown so the session tail isn't lost.
 - `blockedPackages` (parallel to `blockedAppIds`) stamps the package name onto
   each buffered `InterceptLog`.
 
-### 7.3 UI Layer — the Telemetry Console
+### 7.3 UI Layer - the Telemetry Console
 **Files:** `ui/MainScreen.kt` (rewritten), `ui/FocusRadarGraph.kt` (DELETED)
 - **Deleted the hexagonal radar** (`FocusRadarGraph.kt`).
 - **Telemetry header:** 3 glassmorphic metric cards (`#12151C` surface,
@@ -329,9 +329,9 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
   **Threats Neutralized** (total intercepts) · **Peak Focus Time** (e.g.
   "09:00 AM", from `getPeakInterceptHour`).
 - **Interception donut** (`InterceptionDonut`): thick-ringed `Canvas` chart of
-  the top 3 apps — Cyan `#00E5FF` / Purple `#B44CFF` / Electric Blue `#4F8CFF` —
+  the top 3 apps - Cyan `#00E5FF` / Purple `#B44CFF` / Electric Blue `#4F8CFF` -
   animated sweep-in, 3° gaps between segments, center "DROPPED" total readout.
-- **Threat ledger** (`InterceptLedger`): `LazyColumn` of the top 5 — app icon
+- **Threat ledger** (`InterceptLedger`): `LazyColumn` of the top 5 - app icon
   (`rememberAppIconPainter`), resolved app label (PackageManager, cached), exact
   `N×` count, `LinearProgressIndicator` scaled to the top app's count.
 - **7-day activity heatmap** (`ActivityHeatmap`): 7 rounded boxes, color-lerped
@@ -339,11 +339,11 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
   intercept weight, normalized against the best day); today outlined in cyan.
 - **Empty state** (`AwaitingTelemetryWireframe`): a pulsing
   `[ AWAITING NETWORK TELEMETRY ]` wireframe (3 rising signal bars + monospace
-  label) when 0 intercepts — no 0% pie, no crash.
+  label) when 0 intercepts - no 0% pie, no crash.
 - Dossier share now fed by `getTotalIntercepts()` (live).
 
 ### 7.4 Assumptions (documented)
-1. **Package attribution:** the tunnel fd yields only a raw byte stream — the
+1. **Package attribution:** the tunnel fd yields only a raw byte stream - the
    OS never says which app sent a packet (parsing IP headers would leak
    per-app usage). Kept **round-robin** attribution across the shielded
    packages, now stamped per-package into `InterceptLog`.
@@ -361,7 +361,7 @@ Restructured the root layout so the bottom dashboard is **permanently pinned**:
 - No UI leaks when the tile panel is dismissed.
 - Device checks:
   - Notification shows the custom HUD (shield + timer + cyan "X Distractions
-    Intercepted" + "End" button) — NOT the default text layout.
+    Intercepted" + "End" button) - NOT the default text layout.
   - Distraction count increments in real time when a blocked app tries to
     connect.
   - "End session" (notification button OR tile OR app toggle) → tile AND panel

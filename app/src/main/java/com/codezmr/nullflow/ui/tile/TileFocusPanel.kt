@@ -65,7 +65,7 @@ private val PanelSelectedRow = Color(0xFF151D24)
 private val PanelTextDim = Color(0xFFA0A0A0)
 
 /**
- * The GhostShield Focus Panel — a Compose UI hosted inside a native
+ * The GhostShield Focus Panel - a Compose UI hosted inside a native
  * BottomSheetDialog shown from the Quick Settings tile.
  *
  *  - Master Switch: ON starts the shield for the active profile; OFF stops it.
@@ -132,7 +132,7 @@ fun TileFocusPanel(
         if (shouldActivate) {
             val profileId = activeProfile?.id
             if (profileId == null) {
-                AppLog.w("TilePanel: toggle ON but no active profile — ignoring")
+                AppLog.w("TilePanel: toggle ON but no active profile - ignoring")
                 return
             }
             // Mark active + start a session, then start the service (mirrors
@@ -404,7 +404,7 @@ private fun AppIconRow(context: Context, packages: List<String>) {
                 }
             }
         }
-        // Right-edge gradient fade (scroll hint) — only meaningful when there's
+        // Right-edge gradient fade (scroll hint) - only meaningful when there's
         // more content to the right.
         Box(
             modifier = Modifier

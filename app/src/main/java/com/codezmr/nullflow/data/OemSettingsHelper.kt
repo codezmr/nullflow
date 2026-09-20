@@ -14,7 +14,7 @@ import com.codezmr.nullflow.AppLog
  * Chinese OEMs (Xiaomi, Oppo, Vivo, OnePlus) ship proprietary autostart /
  * background-start settings that aggressively kill background apps. The
  * standard Android "Ignore battery optimizations" screen does NOT work on
- * these devices — you must open the OEM's specific (often hidden) settings
+ * these devices - you must open the OEM's specific (often hidden) settings
  * menu.
  *
  * These OEMs frequently rename their internal components across OS updates,
@@ -59,7 +59,7 @@ object OemSettingsHelper {
                     )
                 }
                 else -> {
-                    // Samsung, Pixel, Motorola, etc. — standard Android path.
+                    // Samsung, Pixel, Motorola, etc. - standard Android path.
                     success = launchStandardBatterySettings(context)
                     return
                 }

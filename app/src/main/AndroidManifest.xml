@@ -17,7 +17,7 @@
 
     <!-- Populate the app picker with the user's installed apps.
          QUERY_ALL_PACKAGES is required on Android 11+ to see all packages.
-         (Play Store scrutiny item — fine for sideloaded APK.) -->
+         (Play Store scrutiny item - fine for sideloaded APK.) -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
@@ -68,7 +68,7 @@
         </service>
 
         <!-- FileProvider: securely shares the dossier PNG (in cacheDir) via a
-             content:// URI. Required on Android 11+ — without it, sharing the
+             content:// URI. Required on Android 11+ - without it, sharing the
              file path crashes with FileUriExposedException. -->
         <provider
             android:name="androidx.core.content.FileProvider"

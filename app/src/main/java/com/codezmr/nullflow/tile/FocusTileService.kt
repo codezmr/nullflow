@@ -37,7 +37,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * "GhostShield" — the NullFlow Quick Settings tile.
+ * "GhostShield" - the NullFlow Quick Settings tile.
  *
  * Lives in the swipe-down notification shade. Tapping it opens a native,
  * Compose-powered Focus Panel (BottomSheetDialog) directly over the current
@@ -88,7 +88,7 @@ class FocusTileService : TileService() {
         // Onboarding gate: the shield must NOT be usable before the user has
         // completed the Welcome/Consent screen (which is where the VPN consent
         // is granted). If not onboarded, skip the panel entirely and force the
-        // main app (which shows Welcome) — collapsing the shade.
+        // main app (which shows Welcome) - collapsing the shade.
         if (!Settings.get(this).hasOnboarded) {
             AppLog.d("not onboarded → forcing MainActivity (Welcome screen)")
             openMainActivity()
@@ -171,7 +171,7 @@ class FocusTileService : TileService() {
 
     private fun openMainActivity() {
         // startActivityAndCollapse collapses the shade and launches the app.
-        // On Android 15 the Intent overload is disallowed — it requires a
+        // On Android 15 the Intent overload is disallowed - it requires a
         // PendingIntent. FLAG_ACTIVITY_NEW_TASK is required from a Service.
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -279,7 +279,7 @@ class FocusTileService : TileService() {
  * Composition is disposed and no references leak).
  *
  * It is attached to the dialog's decorView (the window root) via
- * setViewTree*Owner — NOT to the ComposeView — to work around the API 34/35
+ * setViewTree*Owner - NOT to the ComposeView - to work around the API 34/35
  * TileService TYPE_QS_DIALOG window bug that strips child lifecycle tags.
  */
 private class PanelOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {

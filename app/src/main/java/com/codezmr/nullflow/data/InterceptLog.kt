@@ -5,12 +5,12 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * One intercepted (blackholed) connection attempt — a single "packet drop"
+ * One intercepted (blackholed) connection attempt - a single "packet drop"
  * observed by the VPN packet reader.
  *
  * Every row here represents a REAL byte stream read from the tunnel fd and
  * silently dropped by the OS (setBlocking(true)). The payload is never
- * inspected or stored (zero-data privacy) — only the attribution target
+ * inspected or stored (zero-data privacy) - only the attribution target
  * (round-robin across the shielded apps) and the moment it happened.
  *
  * This table is the single source of truth for the Focus Telemetry Console:

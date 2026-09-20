@@ -1,4 +1,4 @@
-# NullFlow — ProGuard/R8 rules (release build)
+# NullFlow - ProGuard/R8 rules (release build)
 
 # Keep VPN service (referenced from AndroidManifest)
 -keep class com.codezmr.nullflow.vpn.FocusVpnService { *; }

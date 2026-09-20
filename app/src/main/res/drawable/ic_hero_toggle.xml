@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  GhostShield QS tile icon — the "null-ring" brand mark:
+  GhostShield QS tile icon - the "null-ring" brand mark:
   a circle with a diagonal slash (echoes the app icon).
   Tinted by the system (grey when inactive, blue glow when active).
   24dp standard icon canvas.

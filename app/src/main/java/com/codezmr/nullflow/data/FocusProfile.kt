@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * A named block list — the "IKEA effect" hook.
+ * A named block list - the "IKEA effect" hook.
  * Users name their modes ("Gym Mode", "Deep Work", "Ghosting Everyone").
  * Only one profile can be active at a time (the one the hero toggle controls).
  */

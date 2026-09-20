@@ -1,6 +1,6 @@
-# GhostShield — Quick Settings Tile & Native Focus Panel (Feature Spec)
+# GhostShield - Quick Settings Tile & Native Focus Panel (Feature Spec)
 
-> **Status:** IMPLEMENTED ✅ — the tile + panel are built and shipping. The open
+> **Status:** IMPLEMENTED ✅ - the tile + panel are built and shipping. The open
 > questions in §5 were resolved during development (see inline notes +
 > `doc/POLISH_SPEC.md` §4 for post-polish additions).
 > **Package:** `com.codezmr.nullflow` · **Depends on:** existing `FocusVpnService`
@@ -89,11 +89,11 @@ Send Intent to VpnService ──► FocusVpnService receives ACTION_REFRESH_RULE
 
 ---
 
-## 5. Open questions (BLOCKING — see QUESTIONS_GHOSTSHIELD.md)
+## 5. Open questions (BLOCKING - see QUESTIONS_GHOSTSHIELD.md)
 See the companion questions file. Key items:
 1. **Hot-swap vs restart** for `ACTION_REFRESH_RULES` (tunnel can't be edited in place).
-2. **Profile switching while shield is OFF** — just update Room, or also start?
-3. **`ic_hero_toggle` icon** does not exist yet — need to create it.
+2. **Profile switching while shield is OFF** - just update Room, or also start?
+3. **`ic_hero_toggle` icon** does not exist yet - need to create it.
 4. **Material `BottomSheetDialog`** requires adding the Material Components dependency.
-5. **Session accounting** — does switching profiles mid-session end the old session?
-6. **Tile icon** — static vs dynamic (active/inactive variants).
+5. **Session accounting** - does switching profiles mid-session end the old session?
+6. **Tile icon** - static vs dynamic (active/inactive variants).

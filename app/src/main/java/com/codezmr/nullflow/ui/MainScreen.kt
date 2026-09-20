@@ -144,7 +144,7 @@ fun MainScreen(
     // Top 5 most-intercepted apps (drives the donut + the threat ledger).
     val topIntercepted by dao.getInterceptionsByApp(5).collectAsState(initial = emptyList())
     // Per-app intercept counts for ALL shielded apps (drives the "Blocked by
-    // App" detail list — how many requests each app tried and we blocked).
+    // App" detail list - how many requests each app tried and we blocked).
     val allAppIntercepts by dao.getInterceptionsByAppAll().collectAsState(initial = emptyList())
     // Total intercepted pings across all time ("Threats Neutralized").
     val totalIntercepts by dao.getTotalIntercepts().collectAsState(initial = 0)
@@ -189,7 +189,7 @@ fun MainScreen(
         }
     }
 
-    // ---- Hero toggle action (INSTANT — consent was handled in onboarding) ----
+    // ---- Hero toggle action (INSTANT - consent was handled in onboarding) ----
     fun onToggle() {
         Haptics.tick(context)
         val current = activeProfile
@@ -201,11 +201,11 @@ fun MainScreen(
             endCurrentSession(dao, scope)
             Haptics.disengage(context)
         } else {
-            // Turn ON — one tap, zero popups.
+            // Turn ON - one tap, zero popups.
             //
             // HARD GATE: the VPN permission MUST be granted before we attempt
             // to start the shield. Without it, VpnService.Builder.establish()
-            // throws and the tunnel never comes up — but the UI would already
+            // throws and the tunnel never comes up - but the UI would already
             // show "Shield on" (profile marked active + session inserted).
             // So we check first and route the user to grant it.
             val vpnReady = android.net.VpnService.prepare(context) == null
@@ -260,7 +260,7 @@ fun MainScreen(
                 .padding(horizontal = 24.dp)
         ) {
             // ---- 1. TOP: Brand mark + screen name + settings ----
-            // The dashboard is the ROOT screen — no in-app back arrow (the
+            // The dashboard is the ROOT screen - no in-app back arrow (the
             // system back gesture already exits). Left slot shows the brand
             // null-ring mark instead.
             Row(
@@ -323,7 +323,7 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Hero reactor core — live intercept count + heat-driven color.
+                // Hero reactor core - live intercept count + heat-driven color.
                 HeroToggle(
                     isActive = isActive,
                     heatState = heatState,
@@ -719,7 +719,7 @@ private fun TelemetryConsole(
     dailyTelemetry: List<DailyFocusStats>
 ) {
     // Default to TODAY (the last row of the 7-day window). Resolved from the
-    // actual data once it arrives — never assume a fixed index, and never show
+    // actual data once it arrives - never assume a fixed index, and never show
     // a future date.
     var selectedDayIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(dailyTelemetry) {
@@ -849,7 +849,7 @@ private fun TelemetryConsole(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = if (selected.focusMs > 0) formatDuration(selected.focusMs) else "—",
+                        text = if (selected.focusMs > 0) formatDuration(selected.focusMs) else "-",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -864,7 +864,7 @@ private fun TelemetryConsole(
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = if (selected.interceptCount > 0) "${selected.interceptCount}" else "—",
+                        text = if (selected.interceptCount > 0) "${selected.interceptCount}" else "-",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -968,7 +968,7 @@ private fun TelemetryConsole(
 }
 
 // ---------------------------------------------------------------------------
-// Per-app blocked row — name + count + a thin share bar
+// Per-app blocked row - name + count + a thin share bar
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -1036,7 +1036,7 @@ private fun BlockedAppRow(
 }
 
 // ---------------------------------------------------------------------------
-// Telemetry header metric card — dark glassmorphic (#12151C / #222733 border)
+// Telemetry header metric card - dark glassmorphic (#12151C / #222733 border)
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -1106,7 +1106,7 @@ private fun lerpColor(from: Color, to: Color, t: Float): Color {
 // ---------------------------------------------------------------------------
 
 /**
- * The Reactor Core — NullFlow's hero toggle.
+ * The Reactor Core - NullFlow's hero toggle.
  *
  * When armed, the core displays the LIVE intercept count and "heats up"
  * under distraction pressure:
@@ -1117,7 +1117,7 @@ private fun lerpColor(from: Color, to: Color, t: Float): Color {
  *
  * SINGLE-DRIVER ANIMATION: one [Animatable] holds the smoothed heat scalar.
  * Core color, glow radius, border alpha, and pulse speed are ALL derived
- * from it in the same frame — guaranteed synchronous, no drift between
+ * from it in the same frame - guaranteed synchronous, no drift between
  * properties. The breathing loop re-targets the Animatable each cycle with
  * a period derived from heat, so the core literally breathes faster as it
  * gets hotter.
@@ -1365,9 +1365,9 @@ private fun formatDuration(ms: Long): String {
     return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
-/** Format a peak hour-of-day (0-23) as e.g. "09:00 AM". Null → "—". */
+/** Format a peak hour-of-day (0-23) as e.g. "09:00 AM". Null -> "-". */
 private fun formatPeakHour(peak: PeakHourStats?): String {
-    if (peak == null) return "—"
+    if (peak == null) return "-"
     val cal = Calendar.getInstance()
     cal.set(Calendar.HOUR_OF_DAY, peak.hourOfDay)
     val fmt = SimpleDateFormat("hh:00 a", Locale.US)
@@ -1456,7 +1456,7 @@ private fun endCurrentSession(dao: FocusDao, scope: kotlinx.coroutines.Coroutine
                     // history (and total-focus stats) stay meaningful.
                     dao.deleteSession(running.id)
                     dao.setActive(running.profileId, false)
-                    AppLog.d("endCurrentSession: session ${running.id} was ${durationMs}ms — dropped as junk")
+                    AppLog.d("endCurrentSession: session ${running.id} was ${durationMs}ms - dropped as junk")
                 } else {
                     dao.endSession(running.id, now, "completed")
                     // Deactivate the profile so the next toggle starts fresh.
@@ -1474,7 +1474,7 @@ private fun endCurrentSession(dao: FocusDao, scope: kotlinx.coroutines.Coroutine
 
 private fun createDefaultProfile(dao: FocusDao): Long {
     // We need the new profile id synchronously (before launching the consent
-    // dialog), so runBlocking is acceptable here — it's a single local insert.
+    // dialog), so runBlocking is acceptable here - it's a single local insert.
     return kotlinx.coroutines.runBlocking {
         dao.insertProfile(FocusProfile(name = "Deep Work"))
     }
@@ -1530,7 +1530,7 @@ private fun BlockedAppIconRow(
 }
 
 // ---------------------------------------------------------------------------
-// Session History — last 5 completed sessions
+// Session History - last 5 completed sessions
 // ---------------------------------------------------------------------------
 
 @Composable
