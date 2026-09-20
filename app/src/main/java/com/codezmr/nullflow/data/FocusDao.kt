@@ -194,6 +194,58 @@ interface FocusDao {
     @Query("SELECT COUNT(*) FROM focus_sessions WHERE endTime IS NOT NULL")
     fun observeCompletedCount(): Flow<Int>
 
+    // ---------- FocusSchedule (recurring focus windows) ----------
+
+    @Insert
+    suspend fun insertSchedule(schedule: FocusSchedule): Long
+
+    @Query("UPDATE focus_schedules SET startMinute = :startMinute, endMinute = :endMinute, " +
+        "daysBitmask = :daysBitmask, isEnabled = :isEnabled WHERE id = :id")
+    suspend fun updateSchedule(
+        id: Long,
+        startMinute: Int,
+        endMinute: Int,
+        daysBitmask: Int,
+        isEnabled: Boolean
+    )
+
+    @Query("UPDATE focus_schedules SET isEnabled = :enabled WHERE id = :id")
+    suspend fun setScheduleEnabled(id: Long, enabled: Boolean)
+
+    @Query("DELETE FROM focus_schedules WHERE id = :id")
+    suspend fun deleteSchedule(id: Long)
+
+    @Query("DELETE FROM focus_schedules WHERE profileId = :profileId")
+    suspend fun deleteSchedulesByProfile(profileId: Long)
+
+    @Query("SELECT * FROM focus_schedules WHERE id = :id")
+    suspend fun getSchedule(id: Long): FocusSchedule?
+
+    /**
+     * Synchronous variant for callers that already run off the main thread
+     * (e.g. ScheduleManager arming alarms from a background context).
+     */
+    @Query("SELECT * FROM focus_schedules WHERE id = :id")
+    fun getScheduleSync(id: Long): FocusSchedule?
+
+    @Query("SELECT * FROM focus_schedules WHERE profileId = :profileId ORDER BY startMinute ASC")
+    fun observeSchedules(profileId: Long): Flow<List<FocusSchedule>>
+
+    /** Every schedule (all profiles), for the full-screen schedule manager. */
+    @Query("SELECT * FROM focus_schedules ORDER BY startMinute ASC")
+    fun observeAllSchedules(): Flow<List<FocusSchedule>>
+
+    /**
+     * Every ENABLED schedule, for re-arming alarms after a device reboot
+     * (AlarmManager schedules are wiped by the kernel on boot).
+     */
+    @Query("SELECT * FROM focus_schedules WHERE isEnabled = 1")
+    suspend fun getEnabledSchedules(): List<FocusSchedule>
+
+    /** Synchronous variant for ScheduleManager (runs off the main thread). */
+    @Query("SELECT * FROM focus_schedules WHERE isEnabled = 1")
+    fun getEnabledSchedulesSync(): List<FocusSchedule>
+
     // ---------- Data management ----------
 
     @Query("DELETE FROM focus_sessions")

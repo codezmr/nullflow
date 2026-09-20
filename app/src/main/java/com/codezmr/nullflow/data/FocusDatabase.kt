@@ -8,8 +8,11 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [FocusProfile::class, BlockedApp::class, FocusSession::class, InterceptLog::class],
-    version = 5,
+    entities = [
+        FocusProfile::class, BlockedApp::class, FocusSession::class,
+        InterceptLog::class, FocusSchedule::class
+    ],
+    version = 6,
     exportSchema = false
 )
 abstract class FocusDatabase : RoomDatabase() {
@@ -31,6 +34,29 @@ abstract class FocusDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v5 → v6: add the focus_schedules table (recurring focus windows).
+         * Purely additive - no existing table is touched, so no user data is
+         * at risk. Times are minutes-from-midnight, days are a 7-bit mask.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `focus_schedules` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`profileId` INTEGER NOT NULL, " +
+                        "`startMinute` INTEGER NOT NULL, " +
+                        "`endMinute` INTEGER NOT NULL, " +
+                        "`daysBitmask` INTEGER NOT NULL, " +
+                        "`isEnabled` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_focus_schedules_profileId` " +
+                        "ON `focus_schedules` (`profileId`)"
+                )
+            }
+        }
+
         fun get(context: Context): FocusDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -38,7 +64,7 @@ abstract class FocusDatabase : RoomDatabase() {
                     FocusDatabase::class.java,
                     "nullflow.db"
                 )
-                    .addMigrations(MIGRATION_4_5)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }

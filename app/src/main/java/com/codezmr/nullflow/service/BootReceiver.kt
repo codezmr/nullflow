@@ -15,9 +15,20 @@ import kotlinx.coroutines.launch
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+
+        // Re-arm ALL enabled schedules FIRST. AlarmManager state is wiped by the
+        // kernel on reboot, so every recurring window must be re-armed or it
+        // silently stops firing after the next restart. This runs regardless of
+        // autoStartOnBoot (schedules are independent of the boot-shield toggle).
+        try {
+            ScheduleManager.reArmAll()
+        } catch (e: Exception) {
+            AppLog.e("BootReceiver: re-arm schedules FAILED", e)
+        }
+
         val settings = Settings.get(context)
         if (!settings.autoStartOnBoot) {
-            AppLog.d("BootReceiver: autoStartOnBoot=false, skipping")
+            AppLog.d("BootReceiver: autoStartOnBoot=false, skipping boot shield")
             return
         }
         val profileId = settings.defaultProfileId ?: return

@@ -60,7 +60,8 @@ private val SfgText = Color(0xFFE6EAF0)
 @Composable
 fun SettingsScreen(
     dao: FocusDao,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenSchedules: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -209,6 +210,16 @@ fun SettingsScreen(
                     val nextIdx = (currentIdx + 1) % options.size
                     settings.autoStopMinutes = options[nextIdx]
                     refresh()
+                }
+
+                SettingDivider()
+
+                // Recurring schedules
+                SettingRow(
+                    title = "Schedules",
+                    subtitle = "Recurring focus windows (e.g. weekdays 6-9 PM)"
+                ) {
+                    onOpenSchedules()
                 }
             }
 

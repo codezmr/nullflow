@@ -101,7 +101,8 @@ fun MainScreen(
     dao: FocusDao,
     onOpenPicker: (Long) -> Unit,
     onOpenModeManager: () -> Unit,
-    onCreateMode: () -> Unit
+    onCreateMode: () -> Unit,
+    onOpenSchedules: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -744,7 +745,8 @@ fun MainScreen(
                 ) {
                     SettingsScreen(
                         dao = dao,
-                        onBack = { showSettings = false }
+                        onBack = { showSettings = false },
+                        onOpenSchedules = onOpenSchedules
                     )
                 }
             }
