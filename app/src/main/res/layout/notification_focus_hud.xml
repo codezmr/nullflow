@@ -1,94 +1,177 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  "Distractions Intercepted" HUD — custom RemoteViews layout for the persistent
-  VPN notification.
+  Focus Session HUD — custom RemoteViews layout for the persistent VPN
+  notification.
+
+  Design: a rounded "card" with clear visual hierarchy:
+    Row 1: shield icon + mode name (bold) + "FOCUS ACTIVE" pill
+    Row 2: big session timer (left) + intercept count (right, cyan)
+    Row 3: full-width "End Session" button + "Tap for details" hint
 
   OEM-SAFETY RULES (heavily skinned OSes reflow layouts aggressively):
    - LinearLayout only (NO ConstraintLayout — OEMs mangle it in RemoteViews).
-   - Fixed heights on the container (not wrap_content on the root).
+   - Fixed/relative heights, no wrap_content on the root.
    - singleLine + ellipsize on every TextView (prevents clipping/overflow).
    - No margins that depend on system insets.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:background="#FF0A0C10"
+    android:orientation="vertical"
+    android:background="@drawable/bg_notification_card"
     android:paddingStart="16dp"
     android:paddingEnd="16dp"
     android:paddingTop="14dp"
-    android:paddingBottom="14dp"
-    android:gravity="center_vertical">
+    android:paddingBottom="12dp">
 
-    <!-- Shield icon -->
-    <ImageView
-        android:id="@+id/iv_shield"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:src="@drawable/ic_shield_hud"
-        android:importantForAccessibility="no"
-        android:contentDescription="@null" />
-
-    <!-- Text column -->
+    <!-- Row 1: icon + mode name + active pill -->
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:layout_marginStart="14dp"
-        android:layout_marginEnd="8dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-        <!-- Title -->
+        <ImageView
+            android:id="@+id/iv_shield"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:src="@drawable/ic_shield_hud"
+            android:importantForAccessibility="no"
+            android:contentDescription="@null" />
+
         <TextView
             android:id="@+id/tv_title"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
             android:text="@string/vpn_service_label"
             android:textColor="#FFFFFFFF"
-            android:textSize="15sp"
+            android:textSize="16sp"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Timer + Distractions Intercepted (single line, cyan accent) -->
         <TextView
-            android:id="@+id/tv_timer"
-            android:layout_width="match_parent"
+            android:id="@+id/tv_active_pill"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="00:00"
-            android:textColor="#FFA0A0A0"
-            android:textSize="13sp"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/tv_pings"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="1dp"
-            android:text="0 Distractions Intercepted"
+            android:text="ACTIVE"
             android:textColor="#FF00E5FF"
-            android:textSize="13sp"
+            android:textSize="10sp"
             android:textStyle="bold"
+            android:letterSpacing="0.1"
             android:maxLines="1"
-            android:ellipsize="end" />
+            android:background="@drawable/bg_active_pill"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp" />
     </LinearLayout>
 
-    <!-- End Session button -->
-    <TextView
-        android:id="@+id/btn_end_session"
-        android:layout_width="wrap_content"
+    <!-- Row 2: timer (left) + intercept count (right) -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="End"
-        android:textColor="#FF0A0C10"
-        android:textSize="13sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:background="#FF00E5FF"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="12dp">
+
+        <!-- Timer block -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_timer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="#FFFFFFFF"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="FOCUS TIME"
+                android:textColor="#FF6B7280"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.12"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <!-- Intercept block (right-aligned) -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="end">
+
+            <TextView
+                android:id="@+id/tv_pings"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="#FF00E5FF"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="BLOCKED"
+                android:textColor="#FF6B7280"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.12"
+                android:maxLines="1" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Row 3: End button + details hint -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="14dp">
+
+        <TextView
+            android:id="@+id/btn_end_session"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="End Session"
+            android:textColor="#FF0A0C10"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:maxLines="1"
+            android:background="@drawable/bg_end_button"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp" />
+
+        <TextView
+            android:id="@+id/tv_details_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="Details ›"
+            android:textColor="#FF6B7280"
+            android:textSize="12sp"
+            android:maxLines="1" />
+    </LinearLayout>
 
 </LinearLayout>

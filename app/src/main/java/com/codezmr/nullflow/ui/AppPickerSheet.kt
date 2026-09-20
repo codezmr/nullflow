@@ -86,16 +86,29 @@ private val BadgeUnselected = Color(0xFF1E2430)
  *  Users build their own modes by picking individual apps — no opaque
  *  predefined categories (trust: the user always sees exactly what's blocked).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Reusable app-picker body (header + search + cards + action bar).
+ *
+ * Extracted from [AppPickerSheet] so the same UI can be embedded in a
+ * full-screen route ([CreateModeScreen]) without the ModalBottomSheet wrapper.
+ * The sheet is now a thin wrapper around this composable.
+ *
+ * @param title        Header label (e.g. "SELECT APPS").
+ * @param onBack       Called by the header back button (null hides the button).
+ * @param actionLabel  Sticky bottom button label (e.g. "Done · 3 apps selected").
+ * @param onAction     Called by the sticky bottom button.
+ */
 @Composable
-fun AppPickerSheet(
+fun AppPickerContent(
     dao: FocusDao,
     profileId: Long,
-    onDismiss: () -> Unit
+    title: String = "SELECT APPS",
+    onBack: (() -> Unit)? = null,
+    actionLabel: String,
+    onAction: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState()
 
     val repo = remember { PackageManagerRepo(context) }
     var installed by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
@@ -123,6 +136,170 @@ fun AppPickerSheet(
         if (q.isEmpty()) installed else installed.filter { it.label.lowercase().contains(q) }
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
+        // ---- Header: screen name + back + count ----
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onBack != null) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(GlassSurface)
+                        .border(1.dp, BorderUnselected, CircleShape)
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("←", fontSize = 14.sp, color = MutedText)
+                }
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.weight(1f)
+            )
+            val shieldedCount = blockedPackages.size
+            Text(
+                text = if (shieldedCount == 0) "0 shielded" else "$shieldedCount shielded",
+                style = MaterialTheme.typography.bodyMedium,
+                color = AccentCyan,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        // ---- Sticky search bar (dark glass) ----
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 12.dp),
+            placeholder = { Text("Search apps...", color = MutedText) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            shape = RoundedCornerShape(16.dp),
+            // Focus state: NO bright cyan border (it competed with the
+            // SHIELDED action buttons). Instead the container lightens
+            // slightly and only the cursor keeps the cyan accent.
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color(0xFF3A4150),
+                unfocusedBorderColor = BorderUnselected,
+                cursorColor = AccentCyan,
+                focusedContainerColor = Color(0xFF1A2029),
+                unfocusedContainerColor = GlassSurface
+            )
+        )
+
+        // ---- Cached-content note (sets expectations) ----
+        // Blocked apps can't load NEW data, but they may still show old
+        // offline/cached content (e.g. Instagram's cached feed). This note
+        // prevents users from thinking the shield "failed" when they scroll
+        // through stale posts.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 12.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFFFFB300).copy(alpha = 0.08f))
+                .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = "Note: Blocked apps may still show old cached content, but cannot load new data.",
+                color = Color(0xFFFFB300).copy(alpha = 0.9f),
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+        }
+
+        // ---- Section label ----
+        Text(
+            text = if (query.isBlank()) "ALL APPS" else "RESULTS",
+            color = MutedText,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 28.dp, bottom = 8.dp)
+        )
+
+        // ---- Tactile app cards ----
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(filtered, key = { it.packageName }) { app ->
+                TactileAppCard(
+                    appName = app.label,
+                    iconBitmap = app.icon,
+                    isShielded = app.packageName in blockedPackages,
+                    onToggle = {
+                        Haptics.thud(context)
+                        toggleApp(dao, scope, profileId, app, app.packageName in blockedPackages)
+                    }
+                )
+            }
+            if (filtered.isEmpty()) {
+                item {
+                    Text(
+                        text = "No apps match \"$query\"",
+                        color = MutedText,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(vertical = 24.dp)
+                    )
+                }
+            }
+        }
+
+        // ---- Sticky action bar ----
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            PrimaryButton(
+                text = actionLabel,
+                onClick = {
+                    Haptics.engage(context)
+                    onAction()
+                }
+            )
+        }
+    }
+}
+
+/**
+ * "The Focus Matrix" — the app picker as a bottom sheet.
+ *
+ * Thin wrapper around [AppPickerContent] so the existing sheet-based flow
+ * (edit apps on an existing mode) is unchanged. New-mode creation now uses
+ * the full-screen [CreateModeScreen] instead.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppPickerSheet(
+    dao: FocusDao,
+    profileId: Long,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val blocked by dao.observeBlockedApps(profileId).collectAsState(initial = emptyList())
+    val count = blocked.size
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -138,152 +315,20 @@ fun AppPickerSheet(
             )
         }
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // ---- Header: screen name + back + count ----
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(GlassSurface)
-                        .border(1.dp, BorderUnselected, CircleShape)
-                        .clickable(onClick = onDismiss),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("←", fontSize = 14.sp, color = MutedText)
-                }
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = "SELECT APPS",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.weight(1f)
-                )
-                val shieldedCount = blockedPackages.size
-                Text(
-                    text = if (shieldedCount == 0) "0 shielded" else "$shieldedCount shielded",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AccentCyan,
-                    fontWeight = FontWeight.SemiBold
-                )
+        AppPickerContent(
+            dao = dao,
+            profileId = profileId,
+            title = "SELECT APPS",
+            onBack = onDismiss,
+            actionLabel = if (count > 0)
+                "Done · $count app${if (count == 1) "" else "s"} selected"
+            else
+                "Done",
+            onAction = {
+                AppLog.d("AppPicker: DONE tapped — closing sheet ($count apps)")
+                onDismiss()
             }
-
-            // ---- Sticky search bar (dark glass) ----
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 12.dp),
-                placeholder = { Text("Search apps...", color = MutedText) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                shape = RoundedCornerShape(16.dp),
-                // Focus state: NO bright cyan border (it competed with the
-                // SHIELDED action buttons). Instead the container lightens
-                // slightly and only the cursor keeps the cyan accent.
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = Color(0xFF3A4150),
-                    unfocusedBorderColor = BorderUnselected,
-                    cursorColor = AccentCyan,
-                    focusedContainerColor = Color(0xFF1A2029),
-                    unfocusedContainerColor = GlassSurface
-                )
-            )
-
-            // ---- Cached-content note (sets expectations) ----
-            // Blocked apps can't load NEW data, but they may still show old
-            // offline/cached content (e.g. Instagram's cached feed). This note
-            // prevents users from thinking the shield "failed" when they scroll
-            // through stale posts.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFFFFB300).copy(alpha = 0.08f))
-                    .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.25f), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = "Note: Blocked apps may still show old cached content, but cannot load new data.",
-                    color = Color(0xFFFFB300).copy(alpha = 0.9f),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp
-                )
-            }
-
-            // ---- Section label ----
-            Text(
-                text = if (query.isBlank()) "ALL APPS" else "RESULTS",
-                color = MutedText,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 28.dp, bottom = 8.dp)
-            )
-
-            // ---- Tactile app cards ----
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                    items(filtered, key = { it.packageName }) { app ->
-                        TactileAppCard(
-                            appName = app.label,
-                            iconBitmap = app.icon,
-                            isShielded = app.packageName in blockedPackages,
-                        onToggle = {
-                            Haptics.thud(context)
-                            toggleApp(dao, scope, profileId, app, app.packageName in blockedPackages)
-                        }
-                    )
-                }
-                if (filtered.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No apps match \"$query\"",
-                            color = MutedText,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(vertical = 24.dp)
-                        )
-                    }
-                }
-            }
-
-            // ---- Done bar ----
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 24.dp)
-            ) {
-                PrimaryButton(
-                    text = if (blockedPackages.size > 0)
-                        "Done · ${blockedPackages.size} app${if (blockedPackages.size == 1) "" else "s"} selected"
-                    else
-                        "Done",
-                    onClick = {
-                        Haptics.engage(context)
-                        AppLog.d("AppPicker: DONE tapped — closing sheet (${blockedPackages.size} apps)")
-                        onDismiss()
-                    }
-                )
-            }
-        }
+        )
     }
 }
 

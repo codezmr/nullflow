@@ -6,5 +6,5 @@
     <string name="vpn_service_text">Local Privacy Shield active — no data leaves your phone</string>
     <string name="notification_channel_name">Focus Session</string>
     <string name="notification_channel_desc">Shown while a focus session is active</string>
-    <string name="tile_label">GhostShield</string>
+    <string name="tile_label">NullFlow</string>
 </resources>

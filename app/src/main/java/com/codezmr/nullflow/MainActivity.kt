@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.codezmr.nullflow.data.FocusDatabase
 import com.codezmr.nullflow.data.Settings
 import com.codezmr.nullflow.ui.AppPickerSheet
+import com.codezmr.nullflow.ui.CreateModeScreen
 import com.codezmr.nullflow.ui.MainScreen
 import com.codezmr.nullflow.ui.ModeManagerSheet
 import com.codezmr.nullflow.ui.NullFlowTheme
@@ -53,6 +54,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // If the user opened the app from the focus-session notification HUD,
+        // flag the dashboard to auto-expand Stats & History (they came for the
+        // details). One-shot: consumed by MainScreen on first composition.
+        if (intent?.getBooleanExtra(FocusVpnService.EXTRA_OPEN_STATS, false) == true) {
+            FocusVpnService.pendingStatsExpand = true
+            AppLog.d("opened from notification → pendingStatsExpand=true")
+        }
+
         val dao = FocusDatabase.get(this).focusDao()
 
         // Reconcile stale state: if the app was killed while the shield was ON,
@@ -72,6 +81,9 @@ class MainActivity : ComponentActivity() {
                     dao.setActive(running.profileId, false)
                     AppLog.w("Reconciled stale session ${running.id} (service not running on app start) → aborted_by_system")
                     com.codezmr.nullflow.data.SystemHealth.postShieldKilledNotification(this@MainActivity)
+                    // Flag the dashboard to show the OEM kill warning card.
+                    // (Not derived from the session reason — see Settings.kt.)
+                    Settings.get(this@MainActivity).showOemKillWarning = true
                 }
             }
         }
@@ -163,10 +175,13 @@ class MainActivity : ComponentActivity() {
                 } else {
                     // Picker sheet state lives here so MainScreen can open it.
                     var pickerProfileId by remember { mutableStateOf<Long?>(null) }
-                    // Mode manager sheet state (lifted here so a newly created
-                    // mode can chain straight into the app picker — seamless
-                    // setup with no "0 apps" dead-end).
+                    // Mode manager sheet state (lifted here so the manager can
+                    // open from the dashboard).
                     var showModeManager by remember { mutableStateOf(false) }
+                    // Full-screen "Create Mode" route (Scenario A). New-mode
+                    // creation happens here — a standard window where the
+                    // keyboard opens reliably (no nested-sheet IME bugs).
+                    var showCreateMode by remember { mutableStateOf(false) }
 
                     MainScreen(
                         dao = dao,
@@ -174,7 +189,11 @@ class MainActivity : ComponentActivity() {
                             AppLog.d("open app picker for profile $profileId")
                             pickerProfileId = profileId
                         },
-                        onOpenModeManager = { showModeManager = true }
+                        onOpenModeManager = { showModeManager = true },
+                        onCreateMode = {
+                            AppLog.d("dashboard: create mode → opening CreateModeScreen")
+                            showCreateMode = true
+                        }
                     )
 
                     if (showModeManager) {
@@ -200,10 +219,10 @@ class MainActivity : ComponentActivity() {
                                 ModeManagerSheet(
                                     dao = dao,
                                     onDismiss = { showModeManager = false },
-                                    onModeCreated = { newId ->
-                                        AppLog.d("mode created (id=$newId) → chaining into app picker")
+                                    onCreateMode = {
+                                        AppLog.d("manager: New Mode → opening CreateModeScreen")
                                         showModeManager = false
-                                        pickerProfileId = newId
+                                        showCreateMode = true
                                     }
                                 )
                             }
@@ -215,6 +234,16 @@ class MainActivity : ComponentActivity() {
                             dao = dao,
                             profileId = pickerProfileId!!,
                             onDismiss = { pickerProfileId = null }
+                        )
+                    }
+
+                    if (showCreateMode) {
+                        CreateModeScreen(
+                            dao = dao,
+                            onBack = {
+                                AppLog.d("CreateModeScreen: back → closing")
+                                showCreateMode = false
+                            }
                         )
                     }
                 }
@@ -255,7 +284,7 @@ class MainActivity : ComponentActivity() {
         try {
             val sbm = getSystemService(StatusBarManager::class.java)
             val tileComponent = ComponentName(this, com.codezmr.nullflow.tile.FocusTileService::class.java)
-            val label = "GhostShield"
+            val label = getString(R.string.app_name)
             val icon = Icon.createWithResource(this, R.drawable.ic_hero_toggle)
             // Main-thread executor (the callback must run on the main thread).
             // Dependency-free: a Handler on the main looper implements Executor.

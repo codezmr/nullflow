@@ -75,11 +75,11 @@ fun ModeManagerSheet(
     dao: FocusDao,
     onDismiss: () -> Unit,
     /**
-     * Called when a NEW mode is created and named. The caller should open the
-     * app picker for this profile so the user completes setup in one flow
-     * (no "0 apps" dead-end modes).
+     * Called when the user taps "New Mode". The caller navigates to the
+     * full-screen [CreateModeScreen] (Scenario A) where naming + app selection
+     * happen in one reliable context.
      */
-    onModeCreated: (Long) -> Unit = {}
+    onCreateMode: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -87,30 +87,10 @@ fun ModeManagerSheet(
     val profiles by dao.observeProfilesWithAppCount().collectAsState(initial = emptyList())
     val activeProfile by dao.observeActiveProfile().collectAsState(initial = null)
 
-    // Inline create/rename state (NO stacked dialogs — the field expands
-    // inside the sheet itself).
-    var showCreate by remember { mutableStateOf(false) }
-    var createName by remember { mutableStateOf("") }
+    // Rename/delete state (creation moved to the full-screen CreateModeScreen).
     var renameTarget by remember { mutableStateOf<FocusProfile?>(null) }
     var renameName by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<FocusProfile?>(null) }
-
-    fun createProfile(name: String) {
-        scope.launch {
-            withContext(Dispatchers.IO) {
-                try {
-                    val id = dao.insertProfile(FocusProfile(name = name))
-                    AppLog.d("ModeManager: created profile '$name' (id=$id)")
-                    // Seamless setup: hand the new profile to the app picker.
-                    onModeCreated(id)
-                } catch (e: Exception) {
-                    AppLog.e("ModeManager: create FAILED", e)
-                }
-            }
-            showCreate = false
-            createName = ""
-        }
-    }
 
     fun renameProfile(profileId: Long, newName: String) {
         scope.launch {
@@ -246,31 +226,17 @@ fun ModeManagerSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        // Create — INLINE (no dialog stacked over the sheet). Tapping "New
-        // Mode" expands a text field right here in the sheet.
-        if (showCreate) {
-            InlineNameField(
-                label = "New Mode",
-                placeholder = "e.g. Deep Work, Gym, Ghosting",
-                text = createName,
-                onTextChange = { createName = it },
-                confirmLabel = "Create & pick apps",
-                onConfirm = { createProfile(createName.trim()) },
-                onDismiss = {
-                    showCreate = false
-                    createName = ""
-                }
-            )
-        } else {
-            SecondaryButton(
-                text = "New Mode",
-                icon = "+",
-                onClick = {
-                    AppLog.d("ModeManager: 'New Mode' tapped → showCreate=true")
-                    showCreate = true
-                }
-            )
-        }
+        // Create — navigates to the full-screen CreateModeScreen (Scenario A).
+        // No inline field: the nested-sheet IME focus bug is eliminated by
+        // doing creation in a standard full-screen window.
+        SecondaryButton(
+            text = "New Mode",
+            icon = "+",
+            onClick = {
+                AppLog.d("ModeManager: 'New Mode' tapped → onCreateMode")
+                onCreateMode()
+            }
+        )
     }
 
     // Delete confirmation overlay

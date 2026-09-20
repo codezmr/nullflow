@@ -33,6 +33,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -193,10 +194,25 @@ class FocusTileService : TileService() {
         val tile = qsTile ?: return
         val active = FocusVpnService.isShieldRunning
         tile.state = if (active) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = getString(R.string.tile_label)
+        // When a shield is active, show the active mode name so the user sees
+        // which mode is engaged at a glance (e.g. "NullFlow · Study"). When
+        // off, just the app name.
+        tile.label = if (active) activeTileLabel() else getString(R.string.tile_label)
         tile.icon = tileIcon(active)
         tile.updateTile()
-        AppLog.d("updateTileState: state=${if (active) "ACTIVE" else "INACTIVE"}")
+        AppLog.d("updateTileState: state=${if (active) "ACTIVE" else "INACTIVE"} label='${tile.label}'")
+    }
+
+    /** "AppName · ModeName" when a shield is active, else just the app name. */
+    private fun activeTileLabel(): String {
+        val appName = getString(R.string.tile_label)
+        return try {
+            val dao = FocusDatabase.get(this).focusDao()
+            val active = kotlinx.coroutines.runBlocking { dao.observeActiveProfile().first() }
+            if (active != null && active.name.isNotBlank()) "$appName · ${active.name}" else appName
+        } catch (e: Exception) {
+            appName
+        }
     }
 
     /** Tinted icon: blue when active, neutral when inactive. */

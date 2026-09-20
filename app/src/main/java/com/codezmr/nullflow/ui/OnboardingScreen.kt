@@ -6,6 +6,12 @@ import android.net.VpnService
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -41,13 +47,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -175,6 +182,18 @@ fun OnboardingScreen(
             .collect { currentPage = it }
     }
 
+    // ---- Swipe guard: block swiping to page 2 (Enhancements) until the VPN
+    // permission is granted. The user must tap "Enable Local Shield" and grant
+    // it — swiping left/right cannot bypass the mandatory permission gate.
+    LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }
+            .collect { page ->
+                if (page >= 2 && !hasVpnPerm) {
+                    pagerState.scrollToPage(1)
+                }
+            }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -276,7 +295,7 @@ fun OnboardingScreen(
                     }
                 )
                 1 -> OnboardingActionButton(
-                    text = if (hasVpnPerm) "Continue" else "Grant VPN to continue",
+                    text = if (hasVpnPerm) "Continue" else "Enable Local Shield",
                     enabled = hasVpnPerm,
                     onClick = {
                         Haptics.engage(context)
@@ -284,7 +303,7 @@ fun OnboardingScreen(
                     }
                 )
                 2 -> OnboardingActionButton(
-                    text = "Finish Setup",
+                    text = "Commit & Finish",
                     enabled = true,
                     onClick = {
                         Haptics.engage(context)
@@ -293,6 +312,16 @@ fun OnboardingScreen(
                     }
                 )
             }
+
+            // Developer signature — absolute bottom, beneath the CTA.
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = "Crafted by CodeZMR",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.4f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -310,12 +339,13 @@ private fun HookPage() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        BreathingHero()
+        // Hero: app icon with a continuous sonar-pulse ripple behind it.
+        SonarHero()
 
         Spacer(Modifier.height(34.dp))
 
         Text(
-            text = "Silence the noise.\nKeep the connection.",
+            text = "Take back your attention.",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = StarkWhite,
@@ -323,29 +353,147 @@ private fun HookPage() {
             lineHeight = 36.sp
         )
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(28.dp))
 
-        // Zero-Data anchor pill
-        Row(
+        // Three-point feature list (high-value info, clean typography).
+        FeatureRow(icon = "shield", text = "Block distracting apps instantly.")
+        Spacer(Modifier.height(14.dp))
+        FeatureRow(icon = "chart", text = "Track your focus and peak hours.")
+        Spacer(Modifier.height(14.dp))
+        FeatureRow(icon = "lock", text = "100% offline. Zero tracking.")
+    }
+}
+
+/**
+ * One feature row: a small line-icon in a tinted circle + a single line of
+ * benefit copy. Clean typography, no emoji.
+ */
+@Composable
+private fun FeatureRow(icon: String, text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(50.dp))
-                .background(IcyBlue.copy(alpha = 0.10f))
-                .border(
-                    width = 1.dp,
-                    color = IcyBlue.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(50.dp)
-                )
-                .padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(IcyBlue.copy(alpha = 0.12f))
+                .border(1.dp, IcyBlue.copy(alpha = 0.3f), CircleShape),
+            contentAlignment = Alignment.Center
         ) {
-            Text("🔒", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "100% local · 0 bytes leave this phone",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = IcyBlue,
-                letterSpacing = 0.3.sp
+            FeatureIcon(kind = icon)
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = StarkWhite.copy(alpha = 0.85f),
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/** Minimal line-icons drawn with Canvas (no emoji, no vector assets). */
+@Composable
+private fun FeatureIcon(kind: String) {
+    val density = LocalDensity.current
+    val stroke = with(density) { 2.dp.toPx() }
+    val c = IcyBlue
+    Canvas(modifier = Modifier.size(18.dp)) {
+        val w = size.width
+        val h = size.height
+        when (kind) {
+            "shield" -> {
+                // Shield outline: top edge + two sides tapering to a point.
+                drawLine(c, Offset(w * 0.5f, h * 0.12f), Offset(w * 0.85f, h * 0.28f), stroke)
+                drawLine(c, Offset(w * 0.5f, h * 0.12f), Offset(w * 0.15f, h * 0.28f), stroke)
+                drawLine(c, Offset(w * 0.15f, h * 0.28f), Offset(w * 0.15f, h * 0.55f), stroke)
+                drawLine(c, Offset(w * 0.85f, h * 0.28f), Offset(w * 0.85f, h * 0.55f), stroke)
+                drawLine(c, Offset(w * 0.15f, h * 0.55f), Offset(w * 0.5f, h * 0.88f), stroke)
+                drawLine(c, Offset(w * 0.85f, h * 0.55f), Offset(w * 0.5f, h * 0.88f), stroke)
+            }
+            "chart" -> {
+                // Three ascending bars.
+                drawLine(c, Offset(w * 0.2f, h * 0.8f), Offset(w * 0.2f, h * 0.55f), stroke)
+                drawLine(c, Offset(w * 0.5f, h * 0.8f), Offset(w * 0.5f, h * 0.35f), stroke)
+                drawLine(c, Offset(w * 0.8f, h * 0.8f), Offset(w * 0.8f, h * 0.2f), stroke)
+            }
+            "lock" -> {
+                // Padlock: body rectangle + shackle arc (approximated with lines).
+                drawLine(c, Offset(w * 0.28f, h * 0.5f), Offset(w * 0.72f, h * 0.5f), stroke)
+                drawLine(c, Offset(w * 0.28f, h * 0.5f), Offset(w * 0.28f, h * 0.82f), stroke)
+                drawLine(c, Offset(w * 0.72f, h * 0.5f), Offset(w * 0.72f, h * 0.82f), stroke)
+                drawLine(c, Offset(w * 0.28f, h * 0.82f), Offset(w * 0.72f, h * 0.82f), stroke)
+                // Shackle
+                drawLine(c, Offset(w * 0.38f, h * 0.5f), Offset(w * 0.38f, h * 0.32f), stroke)
+                drawLine(c, Offset(w * 0.38f, h * 0.32f), Offset(w * 0.62f, h * 0.32f), stroke)
+                drawLine(c, Offset(w * 0.62f, h * 0.32f), Offset(w * 0.62f, h * 0.5f), stroke)
+            }
+        }
+    }
+}
+
+/**
+ * The hero: the app icon centered, with a continuous slow-expanding sonar
+ * ripple behind it (signals the shield is an active, scanning entity).
+ */
+@Composable
+private fun SonarHero() {
+    val infiniteTransition = rememberInfiniteTransition(label = "HeroPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutLinearInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "Scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutLinearInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "Alpha"
+    )
+
+    Box(
+        modifier = Modifier.size(150.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Animated sonar ripple (expands + fades, restarts).
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .graphicsLayer {
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                    alpha = pulseAlpha
+                }
+                .clip(CircleShape)
+                .background(NeonCyan)
+        )
+        // Static hero circle + app icon on top.
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color(0xFF1E1E24), Color(0xFF0C0C10))
+                    )
+                )
+                .shadow(elevation = 14.dp, shape = CircleShape)
+                .padding(10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = "NullFlow",
+                modifier = Modifier.size(72.dp)
             )
         }
     }
@@ -370,14 +518,14 @@ private fun PermissionsPage(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Arm the Shield",
+            text = "Lock in your focus.",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = StarkWhite
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Two permissions power the engine.",
+            text = "Two steps to make distractions impossible.",
             style = MaterialTheme.typography.bodyMedium,
             color = StarkWhite.copy(alpha = 0.5f),
             textAlign = TextAlign.Center
@@ -386,19 +534,27 @@ private fun PermissionsPage(
         Spacer(Modifier.height(30.dp))
 
         PermissionRow(
-            icon = "🔔",
-            title = "Notifications",
-            subtitle = "Required for the focus timer",
+            title = "Timer Notifications",
+            subtitle = "Track your focus progress at a glance.",
             granted = hasNotificationPerm,
             onClick = onNotificationClick
         )
         Spacer(Modifier.height(12.dp))
         PermissionRow(
-            icon = "🛡",
-            title = "Local VPN",
-            subtitle = "Required to drop app traffic",
+            title = "Local Focus Shield",
+            subtitle = "Safely cuts off internet to blocked apps.",
             granted = hasVpnPerm,
             onClick = onVpnClick
+        )
+        // Pre-framing micro-text: Android's system dialog will say "VPN" and
+        // look scary. Warning the user BEFORE they click disarms the fear and
+        // positions us as the trusted developer protecting them.
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "(Android uses its VPN system for this, but 0 bytes ever leave your phone.)",
+            style = MaterialTheme.typography.bodySmall,
+            color = StarkWhite.copy(alpha = 0.35f),
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -423,14 +579,14 @@ private fun EnhancementsPage(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Seamless Focus",
+            text = "Bulletproof the system.",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = StarkWhite
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Optional — skip if you like.",
+            text = "Recommended to prevent interruptions.",
             style = MaterialTheme.typography.bodyMedium,
             color = StarkWhite.copy(alpha = 0.5f),
             textAlign = TextAlign.Center
@@ -439,17 +595,15 @@ private fun EnhancementsPage(
         Spacer(Modifier.height(30.dp))
 
         PermissionRow(
-            icon = "🔋",
-            title = "Ignore Battery Limits",
-            subtitle = "Prevents the OS from killing the shield",
+            title = "Unrestricted Battery",
+            subtitle = "Stops your phone from accidentally turning off the blocker.",
             granted = batteryExempt,
             onClick = onBatteryClick
         )
         Spacer(Modifier.height(12.dp))
         PermissionRow(
-            icon = "⚡",
-            title = "Pin to Quick Settings",
-            subtitle = "Toggle the shield instantly",
+            title = "Quick Settings Tile",
+            subtitle = "Swipe down to activate focus mode instantly.",
             granted = tileAdded,
             pending = tileRequesting,
             onClick = onTileClick
@@ -461,10 +615,9 @@ private fun EnhancementsPage(
 // Shared components
 // ---------------------------------------------------------------------------
 
-/** One permission/enhancement row: icon + title + subtitle + status. */
+/** One permission/enhancement row: status circle + title + subtitle + action. */
 @Composable
 private fun PermissionRow(
-    icon: String,
     title: String,
     subtitle: String,
     granted: Boolean,
@@ -500,7 +653,7 @@ private fun PermissionRow(
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Status circle (check when granted, icon otherwise)
+        // Status circle (check when granted, subtle ring otherwise)
         Box(
             modifier = Modifier
                 .size(30.dp)
@@ -526,7 +679,13 @@ private fun PermissionRow(
                     )
                 }
             } else {
-                Text(text = icon, fontSize = 14.sp)
+                // Subtle inner ring (clean typography, no emoji).
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, IcyBlue.copy(alpha = 0.6f), CircleShape)
+                )
             }
         }
 
@@ -635,97 +794,4 @@ private fun AmbientGlow() {
     )
 }
 
-// ---------------------------------------------------------------------------
-// Breathing Hero — 3D matte toggle with a 4s icy-blue LED pulse
-// ---------------------------------------------------------------------------
 
-@Composable
-private fun BreathingHero() {
-    val breathe = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            breathe.animateTo(
-                targetValue = 1f,
-                animationSpec = androidx.compose.animation.core.tween(
-                    4000,
-                    easing = androidx.compose.animation.core.FastOutSlowInEasing
-                )
-            )
-            breathe.animateTo(
-                targetValue = 0f,
-                animationSpec = androidx.compose.animation.core.tween(
-                    4000,
-                    easing = androidx.compose.animation.core.FastOutSlowInEasing
-                )
-            )
-        }
-    }
-    val b = breathe.value
-    val ledAlpha = 0.25f + b * 0.75f
-    val ledScale = 0.92f + b * 0.12f
-    val heroScale = 0.98f + b * 0.03f
-
-    Box(
-        modifier = Modifier
-            .size(150.dp)
-            .scale(heroScale),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(150.dp)
-                .clip(CircleShape)
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(Color(0xFF1E1E24), Color(0xFF0C0C10))
-                    )
-                )
-                .shadow(elevation = 14.dp, shape = CircleShape)
-                .padding(10.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(Color(0xFF26262E), Color(0xFF141418))
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_launcher_foreground),
-                    contentDescription = "NullFlow",
-                    modifier = Modifier.size(72.dp)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 26.dp, end = 26.dp)
-                        .size(18.dp)
-                        .scale(ledScale)
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    IcyBlue.copy(alpha = ledAlpha),
-                                    IcyBlue.copy(alpha = ledAlpha * 0.4f)
-                                )
-                            )
-                        )
-                        .shadow(elevation = (4 + b * 8).dp, shape = CircleShape)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFEAF9FF).copy(alpha = 0.5f + ledAlpha * 0.5f))
-                    )
-                }
-            }
-        }
-    }
-}

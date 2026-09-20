@@ -98,10 +98,13 @@ interface FocusDao {
      * ledger. One row per package, ordered by intercept count DESC.
      */
     @Query(
-        "SELECT packageName, COUNT(id) AS interceptCount " +
-            "FROM intercept_logs " +
-            "GROUP BY packageName " +
-            "ORDER BY interceptCount DESC, packageName ASC " +
+        "SELECT i.packageName AS packageName, " +
+            "COALESCE(b.appName, i.packageName) AS appName, " +
+            "COUNT(i.id) AS interceptCount " +
+            "FROM intercept_logs i " +
+            "LEFT JOIN blocked_apps b ON b.packageName = i.packageName " +
+            "GROUP BY i.packageName " +
+            "ORDER BY interceptCount DESC, appName ASC " +
             "LIMIT :limit"
     )
     fun getInterceptionsByApp(limit: Int = 5): Flow<List<AppInterceptStats>>
@@ -109,6 +112,24 @@ interface FocusDao {
     /** Total intercepted pings across all time ("Threats Neutralized" metric). */
     @Query("SELECT COUNT(id) FROM intercept_logs")
     fun getTotalIntercepts(): Flow<Int>
+
+    /**
+     * Per-app interception counts for ALL shielded apps (not just the top 5),
+     * for the "Blocked by App" detail list. Joins blocked_apps to recover the
+     * friendly display name (intercept_logs only stores the package name).
+     * Apps with zero intercepts are included (shown as 0) so the user sees the
+     * full picture of what's shielded. Ordered by count DESC, then name ASC.
+     */
+    @Query(
+        "SELECT i.packageName AS packageName, " +
+            "COALESCE(b.appName, i.packageName) AS appName, " +
+            "COUNT(i.id) AS interceptCount " +
+            "FROM intercept_logs i " +
+            "LEFT JOIN blocked_apps b ON b.packageName = i.packageName " +
+            "GROUP BY i.packageName " +
+            "ORDER BY interceptCount DESC, appName ASC"
+    )
+    fun getInterceptionsByAppAll(): Flow<List<AppInterceptStats>>
 
     /**
      * The hour of day (0-23, local time) with the most intercepted pings —
@@ -126,10 +147,11 @@ interface FocusDao {
 
     /**
      * Per-day telemetry for the last 7 days (including today), for the 7-day
-     * activity heatmap. [dayStart] is the local-midnight epoch-ms of the day
-     * 6 days ago; the query emits exactly 7 rows (oldest→newest). Focus time
-     * comes from completed focus sessions, intercepted pings from the
-     * intercept log. Days with no activity come back as zeros.
+     * activity heatmap. [todayStart] is the local-midnight epoch-ms of TODAY;
+     * the query emits exactly 7 rows covering [todayStart - 6 days] → today
+     * (oldest→newest). Focus time comes from completed focus sessions,
+     * intercepted pings from the intercept log. Days with no activity come
+     * back as zeros (so the strip shows blank days, not future dates).
      */
     @Query(
         "SELECT d.ts AS dayStart, " +
@@ -137,11 +159,12 @@ interface FocusDao {
             "  WHERE s.endTime IS NOT NULL AND s.startTime >= d.ts AND s.startTime < d.ts + 86400000), 0) AS focusMs, " +
             "COALESCE((SELECT COUNT(i.id) FROM intercept_logs i " +
             "  WHERE i.timestamp >= d.ts AND i.timestamp < d.ts + 86400000), 0) AS interceptCount " +
-            "FROM (SELECT :dayStart + (v.n * 86400000) AS ts FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 " +
+            "FROM (SELECT :todayStart - 6 * 86400000 + (v.n * 86400000) AS ts " +
+            "  FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 " +
             "  UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6) v) d " +
             "ORDER BY d.ts ASC"
     )
-    fun getDailyTelemetry(dayStart: Long): Flow<List<DailyFocusStats>>
+    fun getDailyTelemetry(todayStart: Long): Flow<List<DailyFocusStats>>
 
     // ---------- FocusSession ----------
 
