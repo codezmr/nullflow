@@ -8,6 +8,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,10 +23,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.codezmr.nullflow.data.FocusDatabase
 import com.codezmr.nullflow.data.Settings
 import com.codezmr.nullflow.ui.AppPickerSheet
 import com.codezmr.nullflow.ui.MainScreen
+import com.codezmr.nullflow.ui.ModeManagerSheet
 import com.codezmr.nullflow.ui.NullFlowTheme
 import com.codezmr.nullflow.ui.OnboardingScreen
 import com.codezmr.nullflow.vpn.FocusVpnService
@@ -149,14 +162,52 @@ class MainActivity : ComponentActivity() {
                 } else {
                     // Picker sheet state lives here so MainScreen can open it.
                     var pickerProfileId by remember { mutableStateOf<Long?>(null) }
+                    // Mode manager sheet state (lifted here so a newly created
+                    // mode can chain straight into the app picker — seamless
+                    // setup with no "0 apps" dead-end).
+                    var showModeManager by remember { mutableStateOf(false) }
 
                     MainScreen(
                         dao = dao,
                         onOpenPicker = { profileId ->
                             AppLog.d("open app picker for profile $profileId")
                             pickerProfileId = profileId
-                        }
+                        },
+                        onOpenModeManager = { showModeManager = true }
                     )
+
+                    if (showModeManager) {
+                        // Bottom-anchored panel: dimmed scrim + sheet pinned to
+                        // the bottom edge (max 80% height, top rounded corners).
+                        // The sheet content shrink-wraps, so the wrapper must
+                        // align it to BottomCenter with a real background —
+                        // otherwise it floats at the top of the screen.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .clickable { showModeManager = false }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .heightIn(max = 640.dp)
+                                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                                    .clickable(enabled = false) { }
+                            ) {
+                                ModeManagerSheet(
+                                    dao = dao,
+                                    onDismiss = { showModeManager = false },
+                                    onModeCreated = { newId ->
+                                        AppLog.d("mode created (id=$newId) → chaining into app picker")
+                                        showModeManager = false
+                                        pickerProfileId = newId
+                                    }
+                                )
+                            }
+                        }
+                    }
 
                     if (pickerProfileId != null) {
                         AppPickerSheet(

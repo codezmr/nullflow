@@ -89,6 +89,11 @@ class FocusVpnService : VpnService() {
         fun refreshIntent(context: Context): Intent =
             Intent(context, FocusVpnService::class.java)
                 .setAction(ACTION_REFRESH_RULES)
+
+        private val _heatState = kotlinx.coroutines.flow.MutableStateFlow(HeatState(0, 0f))
+
+        /** Observed by the dashboard hero core (and any future surface). */
+        val heatState: kotlinx.coroutines.flow.StateFlow<HeatState> = _heatState
     }
 
     private var interfaceFd: ParcelFileDescriptor? = null
@@ -132,11 +137,29 @@ class FocusVpnService : VpnService() {
 
     /**
      * Live count of deflected connection attempts ("pings"). Incremented by the
-     * packet-reader loop every time a blocked app writes to the tunnel. Thread-
-     * safe (the reader runs on IO, the ticker reads it on the main/IO loop).
-     * Reset to 0 on every fresh session start.
+     * packet-reader loop on each DETECTED connection attempt (2s-silence
+     * heuristic — see startPacketReader). Thread-safe (the reader runs on IO,
+     * the ticker reads it on the main/IO loop). Reset to 0 on every fresh
+     * session start.
      */
     private val deflectedPings = AtomicInteger(0)
+
+    /**
+     * 60-second sliding window of intercept timestamps (epoch ms). Drives the
+     * reactor-core HEAT level: the core's color/glow/pulse speed map to how
+     * many connection attempts landed in the last minute. Entries older than
+     * [HEAT_WINDOW_MS] are evicted on every timer tick (1s), so heat rises
+     * under distraction pressure and cools when focus holds.
+     *
+     * Only the reader coroutine writes; the timer tick reads + evicts. Both
+     * run on Dispatchers.IO but different coroutines, so the deque is guarded
+     * by [heatLock].
+     */
+    private val heatWindow = ArrayDeque<Long>()
+    private val heatLock = Any()
+
+    /** Sliding-window length for the heat level. */
+    private val HEAT_WINDOW_MS = 60_000L
 
     /**
      * Dedicated scope for the packet-reader loop. Kept SEPARATE from
@@ -174,6 +197,9 @@ class FocusVpnService : VpnService() {
         AppLog.d("teardown: stopping shield (shouldRun=$shouldRun, fd=${interfaceFd != null})")
         shouldRun = false
         isShieldRunning = false
+        // 0) Cool the reactor core + clear the heat window.
+        synchronized(heatLock) { heatWindow.clear() }
+        _heatState.value = HeatState(0, 0f)
         // 1) Stop the timer loop + packet reader.
         serviceScope.cancel()
         readerScope?.cancel()
@@ -326,6 +352,8 @@ class FocusVpnService : VpnService() {
         shouldRun = true
         isShieldRunning = true
         deflectedPings.set(0) // fresh session → reset the HUD counter
+        synchronized(heatLock) { heatWindow.clear() } // fresh session → cool core
+        _heatState.value = HeatState(0, 0f)
         startPacketReader(fd)
         startInterceptFlusher()
         startTimerUpdates()
@@ -384,9 +412,17 @@ class FocusVpnService : VpnService() {
      *
      * The blackhole tunnel drops packets silently — but the OS still hands us
      * the byte stream on the interface fd. By actively READING that stream we
-     * can count every connection attempt a blocked app makes ("distractions intercepted")
-     * and then discard the payload (strict zero-data privacy: we never inspect,
-     * log, or store the bytes).
+     * can count connection attempts a blocked app makes ("distractions
+     * intercepted") and then discard the payload (strict zero-data privacy:
+     * we never inspect, log, or store the bytes).
+     *
+     * CONNECTION HEURISTIC (Phase 4 counter refinement):
+     * The tunnel fd is ONE multiplexed byte stream — a single TCP connection's
+     * handshake + retries can produce many reads within milliseconds. Counting
+     * every read inflates the metric (one background sync = dozens of "pings").
+     * Instead we count a connection attempt only on a NEW burst: the first
+     * read after >= [CONNECTION_SILENCE_MS] of quiet. A retry storm from one
+     * connection stays inside the silence window and counts once.
      *
      * Runs on a dedicated IO scope so a hot-swap can restart it against the new
      * fd without touching the notification ticker.
@@ -399,6 +435,7 @@ class FocusVpnService : VpnService() {
         scope.launch {
             val input = FileInputStream(fd.fileDescriptor)
             val buffer = ByteArray(32_767) // 32 KB — typical max UDP/TCP segment
+            var lastReadAt = 0L
             AppLog.d("packet reader started")
             try {
                 while (shouldRun) {
@@ -409,12 +446,19 @@ class FocusVpnService : VpnService() {
                         break
                     }
                     if (read > 0) {
-                        // Each successful read = at least one deflected attempt.
-                        deflectedPings.incrementAndGet()
-                        if (com.codezmr.nullflow.data.Settings.get(this@FocusVpnService).verboseLogging) {
-                            AppLog.d("packet: ${read} bytes deflected (total=${deflectedPings.get()})")
+                        val now = System.currentTimeMillis()
+                        val isNewBurst = now - lastReadAt >= CONNECTION_SILENCE_MS
+                        lastReadAt = now
+                        if (isNewBurst) {
+                            // One detected connection attempt.
+                            deflectedPings.incrementAndGet()
+                            // Feed the 60s heat window (drives the reactor core).
+                            synchronized(heatLock) { heatWindow.addLast(now) }
+                            if (com.codezmr.nullflow.data.Settings.get(this@FocusVpnService).verboseLogging) {
+                                AppLog.d("packet: new burst, ${read} bytes (total=${deflectedPings.get()})")
+                            }
+                            bufferDeflectedPing()
                         }
-                        bufferDeflectedPing()
                     }
                     // read == 0 is rare on a FileInputStream; just loop.
                 }
@@ -427,6 +471,13 @@ class FocusVpnService : VpnService() {
             }
         }
     }
+
+    /**
+     * Quiet period (ms) that separates one connection attempt from the next.
+     * Reads closer together than this are treated as the SAME connection's
+     * handshake/retries and do not increment the counter or the heat window.
+     */
+    private val CONNECTION_SILENCE_MS = 2_000L
 
     /**
      * Attribute one deflected ping to a blocked app via round-robin and buffer
@@ -637,12 +688,32 @@ class FocusVpnService : VpnService() {
         return notification
     }
 
-    /** Refresh the notification timer every 1s while active (live ticking). */
+    /**
+     * Refresh the notification timer every 1s while active (live ticking).
+     * Also maintains the 60s heat window: evicts stale timestamps and
+     * publishes the current [HeatState] for the reactor core.
+     */
     private fun startTimerUpdates() {
         serviceScope.launch {
             while (shouldRun) {
                 delay(1_000)
                 if (shouldRun && interfaceFd != null) {
+                    // Evict heat-window entries older than the window and
+                    // publish the live heat level (0..1).
+                    val cutoff = System.currentTimeMillis() - HEAT_WINDOW_MS
+                    val windowSize: Int
+                    synchronized(heatLock) {
+                        while (heatWindow.isNotEmpty() && heatWindow.first() < cutoff) {
+                            heatWindow.removeFirst()
+                        }
+                        windowSize = heatWindow.size
+                    }
+                    // Saturation curve: 15 intercepts in the last minute = full
+                    // heat. sqrt keeps low counts visibly cool and high counts
+                    // from slamming to red on a single burst.
+                    val heat = (kotlin.math.sqrt(windowSize.toFloat() / 15f)).coerceIn(0f, 1f)
+                    _heatState.value = HeatState(deflectedPings.get(), heat)
+
                     try {
                         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                             .notify(NOTIF_ID, buildNotification())
@@ -698,3 +769,14 @@ class FocusVpnService : VpnService() {
         teardown()
     }
 }
+
+/**
+ * Live heat state exposed to the UI (dashboard hero core).
+ *  - [count] session-total detected connection attempts
+ *  - [heat]  0..1 normalized load from the 60s sliding window
+ *
+ * Top-level so the UI can reference it without a service instance.
+ * The single service instance updates the companion [FocusVpnService.heatState]
+ * flow on its 1s timer tick; it resets to (0, 0) on teardown.
+ */
+data class HeatState(val count: Int, val heat: Float)

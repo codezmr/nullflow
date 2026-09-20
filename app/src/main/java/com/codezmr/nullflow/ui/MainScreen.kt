@@ -3,7 +3,12 @@ package com.codezmr.nullflow.ui
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -33,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -51,8 +57,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -86,11 +94,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun MainScreen(
     dao: FocusDao,
-    onOpenPicker: (Long) -> Unit
+    onOpenPicker: (Long) -> Unit,
+    onOpenModeManager: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var showModeManager by remember { mutableStateOf(false) }
     var showNoAppsWarning by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
 
@@ -101,6 +109,12 @@ fun MainScreen(
     val runningSession by dao.observeRunningSession().collectAsState(initial = null)
     val totalMs by dao.observeTotalFocusedMs().collectAsState(initial = 0L)
     val completedCount by dao.observeCompletedCount().collectAsState(initial = 0)
+    // Live heat state from the VPN service (intercept count + 0..1 heat).
+    // Emitted on the service's 1s timer tick; collectAsState keeps this off
+    // the main thread.
+    val heatState by com.codezmr.nullflow.vpn.FocusVpnService
+        .heatState.collectAsState(initial = com.codezmr.nullflow.vpn.HeatState(0, 0f))
+
     // Recent sessions, minus accidental tap-tap-tap junk (< 15s).
     val rawRecentSessions by dao.observeRecentSessions(20).collectAsState(initial = emptyList())
     val recentSessions = remember(rawRecentSessions) {
@@ -272,10 +286,10 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Hero circle
+                // Hero reactor core — live intercept count + heat-driven color.
                 HeroToggle(
                     isActive = isActive,
-                    label = if (isActive) "ON" else "OFF",
+                    heatState = heatState,
                     compact = settings.compactMode,
                     accent = accentColorFromSettings(settings.accentColor),
                     onClick = { onToggle() }
@@ -366,34 +380,38 @@ fun MainScreen(
                 // Mode selector (when OFF)
                 if (!isActive) {
                     if (profiles.isEmpty()) {
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(Color(0xFF12151C))
                                 .border(1.dp, Color(0xFF222733), RoundedCornerShape(16.dp))
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                                .padding(vertical = 28.dp, horizontal = 24.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "No focus mode yet",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "Create a mode to start shielding apps",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            SecondaryButton(
-                                text = "Create your first mode",
-                                icon = "+",
-                                onClick = { showModeManager = true },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "No focus mode yet",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "Create a mode to start shielding apps",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                                )
+                                Spacer(Modifier.height(18.dp))
+                                SecondaryButton(
+                                    text = "Create your first mode",
+                                    icon = "+",
+                                    onClick = onOpenModeManager,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     } else {
                         Text(
@@ -499,7 +517,7 @@ fun MainScreen(
                         SecondaryButton(
                             text = "Manage modes",
                             icon = "+",
-                            onClick = { showModeManager = true },
+                            onClick = onOpenModeManager,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -553,27 +571,6 @@ fun MainScreen(
                 }
 
                 Spacer(Modifier.height(32.dp))
-            }
-        }
-
-        if (showModeManager) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .clickable { showModeManager = false }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .clickable(enabled = false) { }
-                ) {
-                    ModeManagerSheet(
-                        dao = dao,
-                        onDismiss = { showModeManager = false }
-                    )
-                }
             }
         }
 
@@ -954,10 +951,30 @@ private fun lerpColor(from: Color, to: Color, t: Float): Color {
 // Hero Toggle
 // ---------------------------------------------------------------------------
 
+/**
+ * The Reactor Core — NullFlow's hero toggle.
+ *
+ * When armed, the core displays the LIVE intercept count and "heats up"
+ * under distraction pressure:
+ *
+ *   heat 0.0  → deep cyan, slow 2.0s breathing
+ *   heat 0.5  → amber, ~1.4s breathing
+ *   heat 1.0  → incandescent red-orange, fast 0.9s breathing
+ *
+ * SINGLE-DRIVER ANIMATION: one [Animatable] holds the smoothed heat scalar.
+ * Core color, glow radius, border alpha, and pulse speed are ALL derived
+ * from it in the same frame — guaranteed synchronous, no drift between
+ * properties. The breathing loop re-targets the Animatable each cycle with
+ * a period derived from heat, so the core literally breathes faster as it
+ * gets hotter.
+ *
+ * Color path is a 3-point lerp (cyan → amber → red) to avoid the desaturated
+ * grey-purple dead zone a direct 2-point RGB lerp would pass through.
+ */
 @Composable
 private fun HeroToggle(
     isActive: Boolean,
-    label: String,
+    heatState: com.codezmr.nullflow.vpn.HeatState,
     compact: Boolean = false,
     accent: Color = Color(0xFF00E5FF),
     onClick: () -> Unit
@@ -968,102 +985,182 @@ private fun HeroToggle(
         animationSpec = tween(350, easing = FastOutSlowInEasing),
         label = "toggleScale"
     )
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (isActive) 0.6f else 0f,
-        animationSpec = tween(700),
-        label = "glow"
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (isActive) accent else Color(0xFF2A2F3A),
-        animationSpec = tween(500),
-        label = "borderColor"
-    )
 
-    // Pulse animation when active
-    var pulsePhase by remember { mutableStateOf(0f) }
-    LaunchedEffect(isActive) {
-        if (isActive) {
-            while (true) {
-                pulsePhase = 0f
-                val start = System.currentTimeMillis()
-                while (pulsePhase < 1f) {
-                    pulsePhase = ((System.currentTimeMillis() - start) % 2000) / 2000f
-                    delay(50)
-                }
-            }
+    // ---- Heat driver: one Animatable, everything derived from it ----
+    // Target = 0 when disarmed, live heat when armed. The Animatable glides
+    // between targets (600ms) so heat changes feel physical, not steppy.
+    val heatAnim = remember { Animatable(0f) }
+    LaunchedEffect(isActive, heatState.heat) {
+        val target = if (isActive) heatState.heat else 0f
+        if (heatAnim.value != target) {
+            heatAnim.animateTo(
+                targetValue = target,
+                animationSpec = tween(600, easing = FastOutSlowInEasing)
+            )
         }
     }
-    val pulseGlow = if (isActive) 0.3f + 0.3f * (0.5f + 0.5f * kotlin.math.sin(pulsePhase * 2 * kotlin.math.PI).toFloat()) else 0f
+    val heat = heatAnim.value
+
+    // 3-point color lerp: cyan → amber → red-orange (no grey dead zone).
+    val coreColor = if (heat < 0.5f) {
+        lerpColor(accent, Color(0xFFFFB300), heat * 2f)
+    } else {
+        lerpColor(Color(0xFFFFB300), Color(0xFFFF3D00), (heat - 0.5f) * 2f)
+    }
+
+    // Breathing loop: period shrinks 2000ms → 900ms as heat rises.
+    // Re-launches when the (quantized) period changes, so the tempo shifts
+    // smoothly with the heat level without per-frame recomposition.
+    val breathePeriodMs = (2000 - 1100 * heat).toInt()
+    val breathePhase = remember { Animatable(0f) }
+    LaunchedEffect(isActive, breathePeriodMs) {
+        if (!isActive) {
+            breathePhase.snapTo(0f)
+            return@LaunchedEffect
+        }
+        while (true) {
+            breathePhase.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(breathePeriodMs, easing = FastOutSlowInEasing)
+            )
+            breathePhase.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(breathePeriodMs, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+    val breathe = if (isActive) breathePhase.value else 0f
+
+    // Rotating segmented reticle: 360° over 12s, linear (render thread only).
+    val infiniteTransition = rememberInfiniteTransition(label = "heroReticle")
+    val reticleAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 12_000, easing = LinearEasing)
+        ),
+        label = "reticleAngle"
+    )
+
+    // ---- Derived visual properties (all from heat + breathe, same frame) ----
+    val activeBorderAlpha = 0.4f + 0.5f * breathe
+    val glowElevation = (8 + 10 * breathe + 14 * heat).dp
+    val glowAlpha = (0.35f + 0.25f * breathe + 0.3f * heat).coerceIn(0f, 1f)
+    // Reticle dashes tighten as the core heats (scanner speeding up).
+    val reticleDash = (10 - 4 * heat).dp
+    val reticleGap = (5 - 2 * heat).dp
 
     Box(
         modifier = Modifier
             .size(size)
-            .scale(scale)
-            .shadow(
-                elevation = if (isActive) 28.dp else 12.dp,
-                shape = CircleShape,
-                clip = false,
-                ambientColor = if (isActive) accent.copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f),
-                spotColor = if (isActive) accent.copy(alpha = (glowAlpha + pulseGlow).coerceIn(0f, 1f)) else Color.Black.copy(alpha = 0.5f)
-            )
-            .clip(CircleShape)
-            .background(
-                brush = Brush.linearGradient(
-                    colors = if (isActive)
-                        listOf(accent.copy(alpha = 0.12f), accent.copy(alpha = 0.05f))
-                    else
-                        listOf(Color(0xFF1A1E26), Color(0xFF10131A)),
-                    start = Offset(0f, 0f),
-                    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                )
-            )
-            .border(
-                width = 3.dp,
-                color = borderColor,
-                shape = CircleShape
-            )
-            .clickable(onClick = onClick),
+            .scale(scale),
         contentAlignment = Alignment.Center
     ) {
-        // Specular highlight
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.06f),
-                            Color.White.copy(alpha = 0f)
-                        ),
-                        center = Offset(60f, 60f),
-                        radius = 200f
+        // ---- Rotating segmented reticle (behind the core, active only) ----
+        if (isActive) {
+            Canvas(
+                modifier = Modifier
+                    .size(size + 26.dp)
+                    .graphicsLayer { rotationZ = reticleAngle }
+            ) {
+                drawCircle(
+                    color = coreColor.copy(alpha = 0.55f),
+                    radius = size.toPx() / 2f,
+                    style = Stroke(
+                        width = 2.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(
+                            floatArrayOf(reticleDash.toPx(), reticleGap.toPx()), 0f
+                        )
                     )
                 )
-        )
+            }
+        }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Status dot
+        // ---- Core circle ----
+        Box(
+            modifier = Modifier
+                .size(size)
+                .shadow(
+                    elevation = if (isActive) glowElevation else 12.dp,
+                    shape = CircleShape,
+                    clip = false,
+                    ambientColor = if (isActive) coreColor.copy(alpha = glowAlpha) else Color.Black.copy(alpha = 0.5f),
+                    spotColor = if (isActive) coreColor.copy(alpha = glowAlpha) else Color.Black.copy(alpha = 0.5f)
+                )
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = if (isActive)
+                            listOf(coreColor.copy(alpha = 0.14f + 0.1f * heat), coreColor.copy(alpha = 0.05f))
+                        else
+                            listOf(Color(0xFF1A1E26), Color(0xFF10131A)),
+                        start = Offset(0f, 0f),
+                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    )
+                )
+                .border(
+                    width = 3.dp,
+                    color = if (isActive) coreColor.copy(alpha = activeBorderAlpha) else Color(0xFF2A2F3A),
+                    shape = CircleShape
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            // Specular highlight
             Box(
                 modifier = Modifier
-                    .size(14.dp)
+                    .fillMaxSize()
                     .clip(CircleShape)
-                    .background(if (isActive) accent else Color(0xFF3A4150))
-                    .shadow(
-                        elevation = if (isActive) 10.dp else 0.dp,
-                        shape = CircleShape,
-                        ambientColor = accent.copy(alpha = if (isActive) 0.7f else 0f),
-                        spotColor = accent.copy(alpha = if (isActive) 0.7f else 0f)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.06f),
+                                Color.White.copy(alpha = 0f)
+                            ),
+                            center = Offset(60f, 60f),
+                            radius = 200f
+                        )
                     )
             )
-            Spacer(Modifier.height(14.dp))
-            Text(
-                text = label,
-                fontSize = if (compact) 14.sp else 18.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp,
-                color = if (isActive) accent else Color(0xFF8A93A6)
-            )
+
+            // ---- Center content: live count when armed, OFF when disarmed ----
+            if (isActive) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${heatState.count}",
+                        fontSize = if (compact) 30.sp else 44.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = coreColor,
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "INTERCEPTED",
+                        fontSize = if (compact) 8.sp else 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.5.sp,
+                        color = coreColor.copy(alpha = 0.7f)
+                    )
+                }
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF3A4150))
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "OFF",
+                        fontSize = if (compact) 14.sp else 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                        color = Color(0xFF8A93A6)
+                    )
+                }
+            }
         }
     }
 }

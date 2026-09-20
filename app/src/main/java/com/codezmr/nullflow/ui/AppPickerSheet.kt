@@ -188,13 +188,16 @@ fun AppPickerSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 shape = RoundedCornerShape(16.dp),
+                // Focus state: NO bright cyan border (it competed with the
+                // SHIELDED action buttons). Instead the container lightens
+                // slightly and only the cursor keeps the cyan accent.
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
-                    focusedBorderColor = AccentCyan,
+                    focusedBorderColor = Color(0xFF3A4150),
                     unfocusedBorderColor = BorderUnselected,
                     cursorColor = AccentCyan,
-                    focusedContainerColor = GlassSurface,
+                    focusedContainerColor = Color(0xFF1A2029),
                     unfocusedContainerColor = GlassSurface
                 )
             )

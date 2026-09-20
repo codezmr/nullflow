@@ -60,7 +60,13 @@ private val SheetSelected = Color(0xFF151D24)
 @Composable
 fun ModeManagerSheet(
     dao: FocusDao,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /**
+     * Called when a NEW mode is created and named. The caller should open the
+     * app picker for this profile so the user completes setup in one flow
+     * (no "0 apps" dead-end modes).
+     */
+    onModeCreated: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -68,35 +74,43 @@ fun ModeManagerSheet(
     val profiles by dao.observeProfilesWithAppCount().collectAsState(initial = emptyList())
     val activeProfile by dao.observeActiveProfile().collectAsState(initial = null)
 
+    // Inline create/rename state (NO stacked dialogs — the field expands
+    // inside the sheet itself).
     var showCreate by remember { mutableStateOf(false) }
+    var createName by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<FocusProfile?>(null) }
+    var renameName by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<FocusProfile?>(null) }
 
     fun createProfile(name: String) {
         scope.launch {
             withContext(Dispatchers.IO) {
                 try {
-                    dao.insertProfile(FocusProfile(name = name))
-                    AppLog.d("ModeManager: created profile '$name'")
+                    val id = dao.insertProfile(FocusProfile(name = name))
+                    AppLog.d("ModeManager: created profile '$name' (id=$id)")
+                    // Seamless setup: hand the new profile to the app picker.
+                    onModeCreated(id)
                 } catch (e: Exception) {
                     AppLog.e("ModeManager: create FAILED", e)
                 }
             }
             showCreate = false
+            createName = ""
         }
     }
 
-    fun renameProfile(profile: FocusProfile, newName: String) {
+    fun renameProfile(profileId: Long, newName: String) {
         scope.launch {
             withContext(Dispatchers.IO) {
                 try {
-                    dao.renameProfile(profile.id, newName)
-                    AppLog.d("ModeManager: renamed profile ${profile.id} → '$newName'")
+                    dao.renameProfile(profileId, newName)
+                    AppLog.d("ModeManager: renamed profile $profileId → '$newName'")
                 } catch (e: Exception) {
                     AppLog.e("ModeManager: rename FAILED", e)
                 }
             }
             renameTarget = null
+            renameName = ""
         }
     }
 
@@ -185,47 +199,62 @@ fun ModeManagerSheet(
             ) {
                 items(profiles, key = { it.id }) { p ->
                     val isActive = activeProfile?.id == p.id
-                    ModeRow(
-                        name = p.name,
-                        appCount = p.appCount,
-                        isActive = isActive,
-                        onClick = { selectProfileById(p.id, p.name) },
-                        onRename = { renameTarget = FocusProfile(id = p.id, name = p.name, isActive = p.isActive) },
-                        onDelete = { deleteTarget = FocusProfile(id = p.id, name = p.name, isActive = p.isActive) }
-                    )
+                    val isRenaming = renameTarget?.id == p.id
+                    if (isRenaming) {
+                        // Inline rename: the row itself becomes the text field.
+                        InlineNameField(
+                            label = "Rename Mode",
+                            placeholder = "Mode name",
+                            text = renameName,
+                            onTextChange = { renameName = it },
+                            confirmLabel = "Save",
+                            onConfirm = { renameProfile(p.id, renameName.trim()) },
+                            onDismiss = {
+                                renameTarget = null
+                                renameName = ""
+                            }
+                        )
+                    } else {
+                        ModeRow(
+                            name = p.name,
+                            appCount = p.appCount,
+                            isActive = isActive,
+                            onClick = { selectProfileById(p.id, p.name) },
+                            onRename = {
+                                renameTarget = FocusProfile(id = p.id, name = p.name, isActive = p.isActive)
+                                renameName = p.name
+                            },
+                            onDelete = { deleteTarget = FocusProfile(id = p.id, name = p.name, isActive = p.isActive) }
+                        )
+                    }
                 }
             }
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // Create button
-        SecondaryButton(
-            text = "New Mode",
-            icon = "+",
-            onClick = { showCreate = true }
-        )
-    }
-
-    // Create overlay
-    if (showCreate) {
-        InlineNameOverlay(
-            title = "New Mode",
-            placeholder = "e.g. Deep Work, Gym, Ghosting",
-            onConfirm = { name -> createProfile(name) },
-            onDismiss = { showCreate = false }
-        )
-    }
-
-    // Rename overlay
-    renameTarget?.let { target ->
-        InlineNameOverlay(
-            title = "Rename Mode",
-            initialValue = target.name,
-            placeholder = "Mode name",
-            onConfirm = { name -> renameProfile(target, name) },
-            onDismiss = { renameTarget = null }
-        )
+        // Create — INLINE (no dialog stacked over the sheet). Tapping "New
+        // Mode" expands a text field right here in the sheet.
+        if (showCreate) {
+            InlineNameField(
+                label = "New Mode",
+                placeholder = "e.g. Deep Work, Gym, Ghosting",
+                text = createName,
+                onTextChange = { createName = it },
+                confirmLabel = "Create & pick apps",
+                onConfirm = { createProfile(createName.trim()) },
+                onDismiss = {
+                    showCreate = false
+                    createName = ""
+                }
+            )
+        } else {
+            SecondaryButton(
+                text = "New Mode",
+                icon = "+",
+                onClick = { showCreate = true }
+            )
+        }
     }
 
     // Delete confirmation overlay
@@ -296,72 +325,67 @@ private fun ModeRow(
     }
 }
 
+/**
+ * Inline name field — expands INSIDE the sheet (no stacked modal dialog).
+ * Used for both "New Mode" creation and in-row renaming.
+ */
 @Composable
-private fun InlineNameOverlay(
-    title: String,
+private fun InlineNameField(
+    label: String,
     placeholder: String,
-    initialValue: String = "",
-    onConfirm: (String) -> Unit,
+    text: String,
+    onTextChange: (String) -> Unit,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var text by remember { mutableStateOf(initialValue) }
-
-    Box(
+    Column(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f))
-            .clickable { onDismiss() },
-        contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(SheetSurface)
+            .border(1.dp, SheetAccent.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .padding(14.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(SheetSurface)
-                .border(1.dp, SheetBorder, RoundedCornerShape(16.dp))
-                .padding(20.dp)
-        ) {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(12.dp))
-            Box {
-                if (text.isEmpty()) {
-                    Text(
-                        placeholder,
-                        color = SheetMuted,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                    )
-                }
-                BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(SheetBg)
-                        .border(1.dp, SheetBorder, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done)
+        Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Box {
+            if (text.isEmpty()) {
+                Text(
+                    placeholder,
+                    color = SheetMuted,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                 )
             }
-            Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+            BasicTextField(
+                value = text,
+                onValueChange = onTextChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(SheetBg)
+                    .border(1.dp, SheetBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done)
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = SheetMuted)
+            }
+            Spacer(Modifier.width(8.dp))
+            TextButton(
+                onClick = onConfirm,
+                enabled = text.isNotBlank()
             ) {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SheetMuted)
-                }
-                Spacer(Modifier.width(8.dp))
-                TextButton(
-                    onClick = { if (text.isNotBlank()) onConfirm(text.trim()) },
-                    enabled = text.isNotBlank()
-                ) {
-                    Text("Save", color = SheetAccent)
-                }
+                Text(confirmLabel, color = SheetAccent)
             }
         }
     }

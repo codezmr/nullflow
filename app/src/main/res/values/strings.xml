@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">NullFlow</string>
     <string name="tagline">Disconnect on your terms.</string>
-    <string name="vpn_service_label">NullFlow is keeping your focus</string>
+    <string name="vpn_service_label">Shield Active</string>
     <string name="vpn_service_text">Local Privacy Shield active — no data leaves your phone</string>
     <string name="notification_channel_name">Focus Session</string>
     <string name="notification_channel_desc">Shown while a focus session is active</string>
