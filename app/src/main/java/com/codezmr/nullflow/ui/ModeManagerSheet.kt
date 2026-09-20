@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -392,6 +393,18 @@ private fun InlineNameField(
         if (entryScale.value == 1f && entryAlpha.value == 1f && !isFocused) {
             AppLog.d("InlineNameField('$label'): entry settled → requesting IME focus")
             focusRequester.requestFocus()
+        }
+    }
+
+    // When the field successfully captures focus, explicitly command the
+    // keyboard to open. Compose's automatic IME trigger gets swallowed by the
+    // bottom sheet's window insets, so we force it via SoftwareKeyboardController.
+    val keyboardController = LocalSoftwareKeyboardController.current
+    LaunchedEffect(isFocused) {
+        if (isFocused) {
+            delay(50)
+            AppLog.d("InlineNameField('$label'): focus secured → commanding keyboard show")
+            keyboardController?.show()
         }
     }
 
