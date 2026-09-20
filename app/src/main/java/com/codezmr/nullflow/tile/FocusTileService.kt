@@ -181,8 +181,18 @@ class FocusTileService : TileService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         try {
-            startActivityAndCollapse(pendingIntent)
-            AppLog.d("startActivityAndCollapse(PendingIntent) → MainActivity")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // API 34+: PendingIntent overload (the Intent overload is deprecated
+                // and disallowed on Android 15).
+                startActivityAndCollapse(pendingIntent)
+                AppLog.d("startActivityAndCollapse(PendingIntent) → MainActivity")
+            } else {
+                // API 30-33: the PendingIntent overload doesn't exist yet. Use a
+                // plain startActivity (FLAG_ACTIVITY_NEW_TASK is already set); the
+                // shade collapses when the activity comes to the foreground.
+                startActivity(intent)
+                AppLog.d("startActivity → MainActivity (pre-API 34)")
+            }
         } catch (e: Exception) {
             AppLog.e("startActivityAndCollapse FAILED, falling back to startActivity", e)
             startActivity(intent)

@@ -16,6 +16,10 @@
          Android 13+, not user-revocable - safe for GitHub distribution). -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
+    <!-- Required by ConnectivityManager.registerNetworkCallback (VPN slot
+         conflict detection). Normal permission, auto-granted at install. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Populate the app picker with the user's installed apps.
          QUERY_ALL_PACKAGES is required on Android 11+ to see all packages.
          (Play Store scrutiny item - fine for sideloaded APK.) -->
