@@ -122,7 +122,6 @@ fun OnboardingScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasNotificationPerm = granted
-        if (granted) Haptics.engage(context)
     }
 
     val vpnLauncher = rememberLauncherForActivityResult(
@@ -130,7 +129,6 @@ fun OnboardingScreen(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             hasVpnPerm = true
-            Haptics.engage(context)
         }
     }
 
@@ -140,7 +138,6 @@ fun OnboardingScreen(
         ActivityResultContracts.StartActivityForResult()
     ) {
         val now = SystemHealth.isIgnoringBatteryOptimizations(context)
-        if (now && !batteryExempt) Haptics.engage(context)
         batteryExempt = now
     }
 
@@ -155,18 +152,15 @@ fun OnboardingScreen(
                     ) == PackageManager.PERMISSION_GRANTED
                     if (granted != hasNotificationPerm) {
                         hasNotificationPerm = granted
-                        if (granted) Haptics.engage(context)
                     }
                 }
                 val vpnReady = VpnService.prepare(context) == null
                 if (vpnReady != hasVpnPerm) {
                     hasVpnPerm = vpnReady
-                    if (vpnReady) Haptics.engage(context)
                 }
                 val batteryNow = SystemHealth.isIgnoringBatteryOptimizations(context)
                 if (batteryNow != batteryExempt) {
                     batteryExempt = batteryNow
-                    if (batteryNow) Haptics.engage(context)
                 }
             }
         }
@@ -211,7 +205,6 @@ fun OnboardingScreen(
                     hasVpnPerm = hasVpnPerm,
                     onNotificationClick = {
                         if (!hasNotificationPerm) {
-                            Haptics.tick(context)
                             if (Build.VERSION.SDK_INT >= 33) {
                                 notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                             } else {
@@ -221,7 +214,6 @@ fun OnboardingScreen(
                     },
                     onVpnClick = {
                         if (!hasVpnPerm) {
-                            Haptics.tick(context)
                             val intent = VpnService.prepare(context)
                             if (intent != null) {
                                 vpnLauncher.launch(intent)
@@ -237,18 +229,15 @@ fun OnboardingScreen(
                     tileRequesting = tileRequesting,
                     onBatteryClick = {
                         if (!batteryExempt) {
-                            Haptics.tick(context)
                             batteryLauncher.launch(SystemHealth.batterySettingsIntent(context))
                         }
                     },
                     onTileClick = {
                         if (tileAdded || tileRequesting) return@EnhancementsPage
-                        Haptics.tick(context)
                         tileRequesting = true
                         onRequestAddQsTile { added ->
                             tileAdded = added
                             tileRequesting = false
-                            if (added) Haptics.engage(context)
                         }
                     }
                 )
@@ -289,7 +278,6 @@ fun OnboardingScreen(
                     text = "Continue",
                     enabled = true,
                     onClick = {
-                        Haptics.tick(context)
                         scope.launch { pagerState.animateScrollToPage(1) }
                     }
                 )
@@ -297,7 +285,6 @@ fun OnboardingScreen(
                     text = if (hasVpnPerm) "Continue" else "Enable Local Shield",
                     enabled = hasVpnPerm,
                     onClick = {
-                        Haptics.engage(context)
                         scope.launch { pagerState.animateScrollToPage(2) }
                     }
                 )
@@ -305,7 +292,6 @@ fun OnboardingScreen(
                     text = "Commit & Finish",
                     enabled = true,
                     onClick = {
-                        Haptics.engage(context)
                         Settings.get(context).markOnboarded()
                         onEnter()
                     }

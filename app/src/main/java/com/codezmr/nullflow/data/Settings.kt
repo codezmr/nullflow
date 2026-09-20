@@ -33,10 +33,6 @@ class Settings private constructor(context: Context) {
         set(value) { prefs.edit().putInt(KEY_AUTO_STOP_MIN, value).apply() }
 
     // ---- Preferences ----
-    var hapticsEnabled: Boolean
-        get() = prefs.getBoolean(KEY_HAPTICS, true)
-        set(value) { prefs.edit().putBoolean(KEY_HAPTICS, value).apply() }
-
     var compactMode: Boolean
         get() = prefs.getBoolean(KEY_COMPACT, false)
         set(value) { prefs.edit().putBoolean(KEY_COMPACT, value).apply() }
@@ -72,7 +68,6 @@ class Settings private constructor(context: Context) {
         private const val KEY_DEFAULT_PROFILE = "default_profile_id"
         private const val KEY_AUTO_START_BOOT = "auto_start_boot"
         private const val KEY_AUTO_STOP_MIN = "auto_stop_minutes"
-        private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_COMPACT = "compact_mode"
         private const val KEY_ACCENT = "accent_color"
         private const val KEY_VERBOSE_LOG = "verbose_logging"

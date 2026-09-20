@@ -344,66 +344,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ---- PREFERENCES section ----
-            SectionHeader("PREFERENCES")
-            SettingCard {
-                SettingSwitchRow(
-                    title = "Haptic feedback",
-                    subtitle = "Vibration on toggle and actions",
-                    checked = settings.hapticsEnabled,
-                    onCheckedChange = {
-                        settings.hapticsEnabled = it
-                        refresh()
-                    }
-                )
-                SettingDivider()
-                SettingSwitchRow(
-                    title = "Compact mode",
-                    subtitle = "Smaller hero circle, less spacing",
-                    checked = settings.compactMode,
-                    onCheckedChange = {
-                        settings.compactMode = it
-                        refresh()
-                    }
-                )
-                SettingDivider()
-                // Accent color
-                val accentOptions = listOf("cyan" to Color(0xFF00E5FF), "green" to Color(0xFF00FF88), "purple" to Color(0xFFB44CFF))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Accent color", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = SfgText)
-                        Spacer(Modifier.height(2.dp))
-                        Text(settings.accentColor.capitalize(), fontSize = 12.sp, color = SfgMuted)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        accentOptions.forEach { (name, color) ->
-                            val isSelected = settings.accentColor == name
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(
-                                        width = if (isSelected) 3.dp else 1.dp,
-                                        color = if (isSelected) Color.White else SfgBorder,
-                                        shape = CircleShape
-                                    )
-                                    .clickable {
-                                        settings.accentColor = name
-                                        refresh()
-                                    }
-                            )
-                        }
-                    }
-                }
-            }
-
             // ---- ABOUT section ----
             SectionHeader("ABOUT")
             SettingCard {
