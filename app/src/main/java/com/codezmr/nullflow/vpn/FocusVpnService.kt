@@ -284,6 +284,12 @@ class FocusVpnService : VpnService() {
         _heatState.value = HeatState(0, 0f)
         _sessionStart.value = 0L
         sessionStartedAt = 0L
+        // Clear any in-flight Tactical Pass. Without this, stopping the shield
+        // mid-pass leaves isPassActive=true + a frozen _passRemaining, so the
+        // next shield start renders a stuck countdown. The pass countdown
+        // coroutine is also killed by serviceScope.cancel() below.
+        isPassActive = false
+        _passRemaining.value = 0
         // 1) Stop the timer loop + packet reader.
         serviceScope.cancel()
         readerScope?.cancel()
