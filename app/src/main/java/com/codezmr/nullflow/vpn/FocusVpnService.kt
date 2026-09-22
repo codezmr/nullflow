@@ -14,6 +14,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
+import android.view.View
 import android.widget.RemoteViews
 import com.codezmr.nullflow.AppLog
 import com.codezmr.nullflow.MainActivity
@@ -25,6 +27,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -240,11 +243,12 @@ class FocusVpnService : VpnService() {
     private val HEAT_WINDOW_MS = 60_000L
 
     /**
-     * Dedicated scope for the packet-reader loop. Kept SEPARATE from
-     * serviceScope so a hot-swap (refreshRules) can restart the reader against
-     * the new tunnel fd without cancelling the notification ticker.
+     * Job for the packet-reader loop. Launched on serviceScope (Dispatchers.IO)
+     * so it inherits the service lifecycle, but tracked as a Job so a hot-swap
+     * (refreshRules) or a Tactical Pass can cancel just the reader without
+     * cancelling the notification ticker. Reassigned on every restart.
      */
-    private var readerScope: CoroutineScope? = null
+    private var readerJob: Job? = null
 
     /**
      * Instance-level "should the shield be alive" flag. Unlike the static
@@ -254,6 +258,21 @@ class FocusVpnService : VpnService() {
      */
     @Volatile
     private var shouldRun: Boolean = false
+
+    /**
+     * Epoch-ms the current Tactical Pass started (0 when not active). Used as
+     * the standard-notification chronometer target (setWhen requires epoch).
+     */
+    @Volatile
+    private var passStartedAt: Long = 0L
+
+    /**
+     * elapsedRealtime-ms the current Tactical Pass started (0 when not active).
+     * The RemoteViews Chronometer widget requires the elapsedRealtime timebase
+     * (NOT epoch) - passing epoch would render a huge negative number.
+     */
+    @Volatile
+    private var passStartedRealtime: Long = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -284,10 +303,16 @@ class FocusVpnService : VpnService() {
         _heatState.value = HeatState(0, 0f)
         _sessionStart.value = 0L
         sessionStartedAt = 0L
-        // 1) Stop the timer loop + packet reader.
+        // Clear any in-flight Tactical Pass. Without this, stopping the shield
+        // mid-pass leaves isPassActive=true + a frozen _passRemaining, so the
+        // next shield start renders a stuck countdown. The pass countdown
+        // coroutine is also killed by serviceScope.cancel() below.
+        isPassActive = false
+        _passRemaining.value = 0
+        // 1) Stop the timer loop + packet reader. serviceScope.cancel() also
+        //      cancels readerJob (a child), so we only clear the reference.
         serviceScope.cancel()
-        readerScope?.cancel()
-        readerScope = null
+        readerJob = null
         // 2) Close the tunnel.
         try {
             interfaceFd?.close()
@@ -596,15 +621,13 @@ class FocusVpnService : VpnService() {
      * read after >= [CONNECTION_SILENCE_MS] of quiet. A retry storm from one
      * connection stays inside the silence window and counts once.
      *
-     * Runs on a dedicated IO scope so a hot-swap can restart it against the new
-     * fd without touching the notification ticker.
+     * Runs on serviceScope (Dispatchers.IO) as a tracked Job so a hot-swap can
+     * restart it against the new fd without touching the notification ticker.
      */
     private fun startPacketReader(fd: ParcelFileDescriptor) {
-        // Cancel any previous reader (hot-swap case).
-        readerScope?.cancel()
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        readerScope = scope
-        scope.launch {
+        // Cancel any previous reader (hot-swap / snap-back case).
+        readerJob?.cancel()
+        readerJob = serviceScope.launch(Dispatchers.IO) {
             val input = FileInputStream(fd.fileDescriptor)
             val buffer = ByteArray(32_767) // 32 KB - typical max UDP/TCP segment
             var lastReadAt = 0L
@@ -801,31 +824,32 @@ class FocusVpnService : VpnService() {
         interfaceFd = null
 
         // 2) Stop the packet reader (no fd to read from).
-        readerScope?.cancel()
-        readerScope = null
+        readerJob?.cancel()
+        readerJob = null
 
-        // 3) Mark the pass as active and start the countdown.
+        // 3) Mark the pass as active. The visual countdown is delegated to the
+        //    OS chronometer (see buildNotification), so we only push the
+        //    notification ONCE here and again on snap-back.
         isPassActive = true
+        passStartedAt = System.currentTimeMillis()
+        passStartedRealtime = SystemClock.elapsedRealtime()
         _passRemaining.value = EMERGENCY_PASS_SECONDS
         AppLog.d("emergencyPass: STARTED - ${EMERGENCY_PASS_SECONDS}s leash active")
 
-        // 4) Launch the countdown coroutine.
-        serviceScope.launch {
-            var remaining = EMERGENCY_PASS_SECONDS
-            while (remaining > 0 && shouldRun && isPassActive) {
-                delay(1_000)
-                remaining--
-                _passRemaining.value = remaining
-                // Update the notification with the countdown.
-                try {
-                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                        .notify(NOTIF_ID, buildNotification())
-                } catch (e: Exception) {
-                    AppLog.e("emergencyPass: notification update failed", e)
-                }
-            }
+        // 4) Push the chronometer notification once, then wait the full duration.
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .notify(NOTIF_ID, buildNotification())
+        } catch (e: Exception) {
+            AppLog.e("emergencyPass: notification update failed", e)
+        }
 
-            // 5) Snap back: re-establish the tunnel.
+        // 5) Single sleep for the full pass. No per-second ticks: the OS
+        //    chronometer handles the visual countdown natively.
+        serviceScope.launch {
+            delay(EMERGENCY_PASS_SECONDS * 1_000L)
+            // Snap back only if the shield is still up and the pass wasn't
+            // cancelled by a manual stop (teardown clears isPassActive).
             if (shouldRun && isPassActive) {
                 AppLog.d("emergencyPass: countdown complete - snapping back")
                 snapBack()
@@ -968,18 +992,31 @@ class FocusVpnService : VpnService() {
         val views = RemoteViews(packageName, R.layout.notification_focus_hud)
 
         if (isPassActive && passRemaining > 0) {
-            // Tactical Pass active: show countdown.
-            val passMins = passRemaining / 60
-            val passSecs = passRemaining % 60
-            val passTimer = String.format("%02d:%02d", passMins, passSecs)
+            // Tactical Pass active: drive the countdown natively via the
+            // Chronometer widget (OS ticks it, no per-second notify()).
             views.setTextViewText(R.id.tv_title, "$modeName (Pass)")
-            views.setTextViewText(R.id.tv_timer, "Resumes in $passTimer")
             views.setTextViewText(R.id.tv_pings, "$pings blocked")
+            views.setTextViewText(R.id.tv_timer_label, "RESUMES IN")
+            // Hide the static session timer, show the live chronometer.
+            views.setViewVisibility(R.id.tv_timer, View.GONE)
+            views.setViewVisibility(R.id.hud_countdown_timer, View.VISIBLE)
+            // Count down (API 24+; minSdk is 30). Target uses the
+            // elapsedRealtime timebase the Chronometer widget requires.
+            views.setChronometerCountDown(R.id.hud_countdown_timer, true)
+            views.setChronometer(
+                R.id.hud_countdown_timer,
+                passStartedRealtime + EMERGENCY_PASS_SECONDS * 1_000L,
+                "%s",
+                true
+            )
         } else {
-            // Normal mode: show session timer.
+            // Normal mode: show session timer, hide the pass chronometer.
             views.setTextViewText(R.id.tv_title, modeName)
             views.setTextViewText(R.id.tv_timer, timer)
+            views.setTextViewText(R.id.tv_timer_label, "FOCUS TIME")
             views.setTextViewText(R.id.tv_pings, "$pings")
+            views.setViewVisibility(R.id.tv_timer, View.VISIBLE)
+            views.setViewVisibility(R.id.hud_countdown_timer, View.GONE)
         }
 
         // Tapping the HUD body (title / timer / count / details hint) opens the
@@ -991,13 +1028,14 @@ class FocusVpnService : VpnService() {
         // The "End Session" button stops the shield (works during pass too).
         views.setOnClickPendingIntent(R.id.btn_end_session, stopIntent)
 
-        val contentText = if (isPassActive && passRemaining > 0) {
+        val passActive = isPassActive && passRemaining > 0
+        val contentText = if (passActive) {
             "Pass active · resumes in ${passRemaining / 60}:${String.format("%02d", passRemaining % 60)}"
         } else {
             "$pings blocked · $timer"
         }
 
-        val notification = Notification.Builder(this, CHANNEL_ID)
+        val builder = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shield_hud)
             .setContentTitle(modeName)
             .setContentText(contentText)
@@ -1007,7 +1045,18 @@ class FocusVpnService : VpnService() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .build()
+
+        if (passActive) {
+            // Delegate the visual countdown to the OS chronometer. The system
+            // ticks the standard notification text down to 00:00 natively on
+            // the shade + lock screen, so we avoid pushing a notify() every
+            // second. Target = pass start + full duration.
+            builder.setWhen(passStartedAt + EMERGENCY_PASS_SECONDS * 1_000L)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
+        }
+
+        val notification = builder.build()
         AppLog.d("buildNotification: HUD mode='$modeName' timer='$timer' pings='$pings' pass=$passRemaining ongoing=true")
         return notification
     }
@@ -1065,8 +1114,7 @@ class FocusVpnService : VpnService() {
         shouldRun = false
         isShieldRunning = false
         serviceScope.cancel()
-        readerScope?.cancel()
-        readerScope = null
+        readerJob = null
         try {
             interfaceFd?.close()
             AppLog.d("  tunnel fd closed")
