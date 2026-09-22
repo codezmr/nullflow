@@ -2,6 +2,8 @@
 
 A focus shield for Android. Select the apps that distract you, flip the switch, and NullFlow silently drops their network traffic through a local VPN tunnel - no root, no cloud, no data leaves your device.
 
+**Landing page:** [shutupchat.com/nullflow](https://shutupchat.com/nullflow)
+
 ## How it works
 
 NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6). When the shield is active, DNS queries and TCP/UDP connections from blocked apps are intercepted and dropped at the socket level. The apps still "work" locally but cannot reach the internet - notifications, feeds, and updates simply stop.
@@ -35,6 +37,10 @@ NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6).
 | File logging | Optional shareable log file (off by default, toggle in Settings) |
 
 ## Install
+
+### From the landing page
+
+The [landing page](https://shutupchat.com/nullflow) has a "Download APK" button that scrolls to the deployment protocol (compile from source or grab a pre-built release).
 
 ### From GitHub Releases
 
