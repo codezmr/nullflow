@@ -41,7 +41,7 @@ The apps still function locally, but their feeds, notifications, and updates are
 
 | Core Systems | Description |
 | :--- | :--- |
-| **Reactor Core** | Hero UI toggle with live intercept heat—pulsing based on real-time blocking. |
+| **Reactor Core** | Hero UI toggle with live intercept heat-pulsing based on real-time blocking. |
 | **Session Engine** | Set recurring focus windows via precise `AlarmManager` triggers (survives reboots). |
 | **Tactical Pass** | *[BETA]* A 2-minute network leash to temporarily pause the shield without breaking your session. |
 | **Surgical Bypass** | Pause a single app's block (2 to 30 mins) to grab an OTP without editing your mode. |
