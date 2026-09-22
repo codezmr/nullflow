@@ -137,6 +137,10 @@ fun MainScreen(
     val passRemaining by com.codezmr.nullflow.vpn.FocusVpnService
         .passRemaining.collectAsState(initial = 0)
 
+    // Per-app temp-allow expiry (pkg → epoch-ms). Drives the per-app countdown.
+    val tempAllowExpiry by com.codezmr.nullflow.vpn.FocusVpnService
+        .tempAllowExpiry.collectAsState(initial = emptyMap())
+
     // Recent sessions, minus accidental tap-tap-tap junk (< 15s).
     val rawRecentSessions by dao.observeRecentSessions(20).collectAsState(initial = emptyList())
     val recentSessions = remember(rawRecentSessions) {
@@ -345,48 +349,83 @@ fun MainScreen(
                 // ---- Tactical Pass button (BETA) - only when shield is ON ----
                 if (isActive) {
                     Spacer(Modifier.height(12.dp))
+                    val passActive = passRemaining > 0
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF1A1F2E))
-                            .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(12.dp))
-                            .clickable {
-                                context.startService(
-                                    com.codezmr.nullflow.vpn.FocusVpnService.emergencyPassIntent(context)
-                                )
-                                AppLog.d("Emergency Pass tapped - starting 2-min leash")
-                            }
+                            .background(
+                                if (passActive) Color(0xFFFF9500).copy(alpha = 0.12f)
+                                else Color(0xFF1A1F2E)
+                            )
+                            .border(
+                                1.dp,
+                                if (passActive) Color(0xFFFF9500).copy(alpha = 0.5f)
+                                else Color(0xFF2A3040),
+                                RoundedCornerShape(12.dp)
+                            )
+                            // Disabled while a pass is active: the user cannot
+                            // start a second pass (the service also no-ops).
+                            .then(
+                                if (passActive) Modifier
+                                else Modifier.clickable {
+                                    context.startService(
+                                        com.codezmr.nullflow.vpn.FocusVpnService.emergencyPassIntent(context)
+                                    )
+                                    AppLog.d("Emergency Pass tapped - starting 2-min leash")
+                                }
+                            )
                             .padding(horizontal = 20.dp, vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Emergency Pass",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFFE6EAF0)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFFFF9500).copy(alpha = 0.15f))
-                                    .border(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                            ) {
+                            if (passActive) {
+                                // Live countdown + "Resume" label while active.
+                                val m = passRemaining / 60
+                                val s = passRemaining % 60
                                 Text(
-                                    text = "BETA",
-                                    fontSize = 8.sp,
+                                    text = String.format("%02d:%02d", m, s),
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFF9500)
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFFFFB300)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "PAUSED",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    letterSpacing = 0.5.sp,
+                                    color = Color(0xFFFFB300).copy(alpha = 0.8f)
+                                )
+                            } else {
+                                Text(
+                                    text = "Emergency Pass",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFFE6EAF0)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFFFF9500).copy(alpha = 0.15f))
+                                        .border(1.dp, Color(0xFFFF9500).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = "BETA",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF9500)
+                                    )
+                                }
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "(2m)",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF808080)
                                 )
                             }
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "(2m)",
-                                fontSize = 12.sp,
-                                color = Color(0xFF808080)
-                            )
                         }
                     }
                 }
@@ -432,26 +471,12 @@ fun MainScreen(
                         )
                         if (blockedCount > 0) {
                             Spacer(Modifier.height(12.dp))
-                            BlockedAppIconRow(
+                            BlockedAppPauseList(
                                 context = context,
                                 apps = blockedApps,
-                                bg = Color(0xFF12151C),
-                                onAppTap = if (isActive) { pkg ->
-                                    context.startService(
-                                        com.codezmr.nullflow.vpn.FocusVpnService
-                                            .tempAllowAppIntent(context, pkg)
-                                    )
-                                    AppLog.d("Per-app temp allow tapped: $pkg")
-                                } else null
+                                isActive = isActive,
+                                tempAllowExpiry = tempAllowExpiry
                             )
-                            if (isActive) {
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    text = "Tap an app to allow it for 2 min",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                                )
-                            }
                         }
                         if (runningSession != null) {
                             Spacer(Modifier.height(16.dp))
@@ -1569,66 +1594,246 @@ private fun createDefaultProfile(dao: FocusDao): Long {
 }
 
 /**
- * A horizontal, scrollable row of the blocked apps' icons (24dp circles,
- * 8dp spacing) with a right-edge gradient fade as a scroll hint. Mirrors the
- * QS tile panel's icon row so the user sees exactly what's shielded.
+ * Predefined per-app pause durations (minutes). The last entry is a sentinel
+ * for "remove from list" (re-block immediately).
+ */
+private val PAUSE_DURATION_MINUTES = listOf(2, 5, 10, 20, 30)
+
+/**
+ * A vertical list of the blocked apps, each with a per-app pause control.
+ *
+ * - When the shield is OFF: plain icon + name (no controls).
+ * - When ON and the app is NOT paused: a "Pause" button. Tapping it reveals a
+ *   row of predefined duration chips (2/5/10/20/30 min) + "Remove".
+ * - When ON and the app IS paused: a live countdown (MM:SS) + a "Resume"
+ *   button (re-blocks immediately).
+ *
+ * The countdown is derived from [tempAllowExpiry] (pkg → epoch-ms) and a
+ * ticking [now] so it updates live without any service-side per-second push.
  */
 @Composable
-private fun BlockedAppIconRow(
+private fun BlockedAppPauseList(
     context: android.content.Context,
     apps: List<com.codezmr.nullflow.data.BlockedApp>,
-    bg: Color,
-    onAppTap: ((String) -> Unit)? = null
+    isActive: Boolean,
+    tempAllowExpiry: Map<String, Long>
 ) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    // Ticking clock (1s) so per-app countdowns update live.
+    val now = rememberTick(1_000L)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        apps.forEachIndexed { index, app ->
+            val expiry = tempAllowExpiry[app.packageName]
+            val isPaused = isActive && expiry != null
+            val remainingMs = if (isPaused) (expiry!! - now).coerceAtLeast(0L) else 0L
+
+            BlockedAppPauseRow(
+                context = context,
+                app = app,
+                isActive = isActive,
+                isPaused = isPaused,
+                remainingMs = remainingMs,
+                onPickDuration = { minutes ->
+                    context.startService(
+                        com.codezmr.nullflow.vpn.FocusVpnService
+                            .tempAllowAppIntent(context, app.packageName, minutes * 60_000L)
+                    )
+                    AppLog.d("Per-app pause: ${app.packageName} for ${minutes}m")
+                },
+                onResume = {
+                    context.startService(
+                        com.codezmr.nullflow.vpn.FocusVpnService
+                            .tempRevokeAppIntent(context, app.packageName)
+                    )
+                    AppLog.d("Per-app resume: ${app.packageName}")
+                },
+                onRemove = {
+                    context.startService(
+                        com.codezmr.nullflow.vpn.FocusVpnService
+                            .tempRevokeAppIntent(context, app.packageName)
+                    )
+                    AppLog.d("Per-app remove: ${app.packageName}")
+                }
+            )
+            if (index != apps.lastIndex) {
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+/**
+ * A single blocked-app row with its pause control.
+ *
+ * Layout: [icon] [name + status] ............ [control]
+ * - control = "Pause" button (collapsed) → expands to duration chips
+ * - control = live countdown + "Resume" (when paused)
+ */
+@Composable
+private fun BlockedAppPauseRow(
+    context: android.content.Context,
+    app: com.codezmr.nullflow.data.BlockedApp,
+    isActive: Boolean,
+    isPaused: Boolean,
+    remainingMs: Long,
+    onPickDuration: (Int) -> Unit,
+    onResume: () -> Unit,
+    onRemove: () -> Unit
+) {
+    // Which app's duration picker is open (local UI state).
+    var showPicker by remember { mutableStateOf(false) }
+    val painter = rememberAppIconPainter(context, app.packageName)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(apps, key = { it.packageName }) { app ->
-                val painter = rememberAppIconPainter(context, app.packageName)
-                // 48dp touch target (Material spec) around the 24dp icon. Tapping
-                // an icon fires a per-app temporary allow (bypass block for 2m).
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF1E2430))
+            ) {
+                Image(
+                    painter = painter,
+                    contentDescription = app.appName,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = app.appName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFE6EAF0),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (isPaused) {
+                    val totalSec = (remainingMs / 1000).toInt()
+                    val m = totalSec / 60
+                    val s = totalSec % 60
+                    Text(
+                        text = String.format("Allowed · %02d:%02d left", m, s),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFFFB300)
+                    )
+                } else {
+                    Text(
+                        text = if (isActive) "Blocked" else "In mode",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                    )
+                }
+            }
+            // Control: Pause button, or Resume button when paused.
+            if (!isActive) {
+                // Shield off: no controls.
+            } else if (isPaused) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .then(
-                            if (onAppTap != null)
-                                Modifier.clickable { onAppTap(app.packageName) }
-                            else Modifier
-                        ),
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1A3A2A))
+                        .border(1.dp, Color(0xFF2E7D52), RoundedCornerShape(8.dp))
+                        .clickable { onResume() }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1E2430))
-                    ) {
-                        Image(
-                            painter = painter,
-                            contentDescription = app.appName,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                    Text(
+                        text = "Resume",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF4ADE80)
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1A1F2E))
+                        .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(8.dp))
+                        .clickable { showPicker = !showPicker }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = if (showPicker) "Close" else "Pause",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE6EAF0)
+                    )
                 }
             }
         }
-        // Right-edge gradient fade (scroll hint).
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(36.dp)
-                .fillMaxHeight()
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            bg.copy(alpha = 0f),
-                            bg.copy(alpha = 0.9f)
+
+        // Duration picker (only when active, not paused, and picker open).
+        if (isActive && !isPaused && showPicker) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 44.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                PAUSE_DURATION_MINUTES.forEach { minutes ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF1A1F2E))
+                            .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(6.dp))
+                            .clickable {
+                                onPickDuration(minutes)
+                                showPicker = false
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${minutes}m",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFE6EAF0)
                         )
+                    }
+                }
+                // "Remove" sentinel: re-block immediately (no pause window).
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF2A1A1A))
+                        .border(1.dp, Color(0xFF7D2E2E), RoundedCornerShape(6.dp))
+                        .clickable {
+                            onRemove()
+                            showPicker = false
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Remove",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFFF6B6B)
                     )
-                )
-        )
+                }
+            }
+        }
     }
+}
+
+/**
+ * A ticking clock: returns the current epoch-ms, recomposing every [periodMs].
+ * Used to drive live per-app countdowns without service-side per-second pushes.
+ */
+@Composable
+private fun rememberTick(periodMs: Long): Long {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(periodMs) {
+        while (true) {
+            kotlinx.coroutines.delay(periodMs)
+            now = System.currentTimeMillis()
+        }
+    }
+    return now
 }
 
 // ---------------------------------------------------------------------------

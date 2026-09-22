@@ -71,6 +71,8 @@ class FocusVpnService : VpnService() {
         const val ACTION_EMERGENCY_PASS = "com.codezmr.nullflow.action.EMERGENCY_PASS"
         // Per-app temporary allow: bypass the block for ONE app during a session.
         const val ACTION_TEMP_ALLOW_APP = "com.codezmr.nullflow.action.TEMP_ALLOW_APP"
+        // Per-app temporary revoke: re-block an app before its allow expires.
+        const val ACTION_TEMP_REVOKE_APP = "com.codezmr.nullflow.action.TEMP_REVOKE_APP"
         const val EXTRA_PROFILE_ID = "profile_id"
         const val EXTRA_PACKAGE_NAME = "package_name"
         const val EXTRA_DURATION_MS = "duration_ms"
@@ -143,6 +145,12 @@ class FocusVpnService : VpnService() {
                     if (durationMs != null) putExtra(EXTRA_DURATION_MS, durationMs)
                 }
 
+        /** Build the ACTION_TEMP_REVOKE_APP intent (re-block an app early). */
+        fun tempRevokeAppIntent(context: Context, packageName: String): Intent =
+            Intent(context, FocusVpnService::class.java)
+                .setAction(ACTION_TEMP_REVOKE_APP)
+                .putExtra(EXTRA_PACKAGE_NAME, packageName)
+
         private val _heatState = kotlinx.coroutines.flow.MutableStateFlow(HeatState(0, 0f))
 
         /** Observed by the dashboard hero core (and any future surface). */
@@ -162,6 +170,16 @@ class FocusVpnService : VpnService() {
          */
         private val _passRemaining = kotlinx.coroutines.flow.MutableStateFlow(0)
         val passRemaining: kotlinx.coroutines.flow.StateFlow<Int> = _passRemaining
+
+        /**
+         * Per-app temp-allow expiry, as epoch-ms (pkg → expiry). Observed by the
+         * dashboard to render a live per-app countdown. Empty when no app is
+         * temp-allowed. Updated when an allow starts/extends and cleared on
+         * expiry or teardown.
+         */
+        private val _tempAllowExpiry =
+            kotlinx.coroutines.flow.MutableStateFlow<Map<String, Long>>(emptyMap())
+        val tempAllowExpiry: kotlinx.coroutines.flow.StateFlow<Map<String, Long>> = _tempAllowExpiry
 
         /** True while the Tactical Pass is active (tunnel closed, countdown running). */
         @Volatile
@@ -354,6 +372,7 @@ class FocusVpnService : VpnService() {
         // intact for the next session.
         tempAllowedApps.value = emptySet()
         tempAllowTimers.clear()
+        _tempAllowExpiry.value = emptyMap()
         // 1) Stop the timer loop + packet reader. serviceScope.cancel() also
         //      cancels readerJob (a child), so we only clear the reference.
         serviceScope.cancel()
@@ -517,6 +536,17 @@ class FocusVpnService : VpnService() {
                 } else {
                     AppLog.d("ACTION_TEMP_ALLOW_APP received → $pkg for ${durationMs}ms (startId=$startId)")
                     handleTempAllowApp(pkg, durationMs)
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_TEMP_REVOKE_APP -> {
+                // Per-app temporary revoke: re-block an app before it expires.
+                val pkg = intent.getStringExtra(EXTRA_PACKAGE_NAME)
+                if (pkg.isNullOrBlank()) {
+                    AppLog.w("ACTION_TEMP_REVOKE_APP: missing package name - no-op")
+                } else {
+                    AppLog.d("ACTION_TEMP_REVOKE_APP received → $pkg (startId=$startId)")
+                    revokeTempAllow(pkg)
                 }
                 return START_NOT_STICKY
             }
@@ -901,7 +931,8 @@ class FocusVpnService : VpnService() {
         _passRemaining.value = EMERGENCY_PASS_SECONDS
         AppLog.d("emergencyPass: STARTED - ${EMERGENCY_PASS_SECONDS}s leash active")
 
-        // 4) Push the chronometer notification once, then wait the full duration.
+        // 4) Push the chronometer notification ONCE. The OS ticks the
+        //    notification's countdown natively (no per-second notify()).
         try {
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                 .notify(NOTIF_ID, buildNotification())
@@ -909,10 +940,17 @@ class FocusVpnService : VpnService() {
             AppLog.e("emergencyPass: notification update failed", e)
         }
 
-        // 5) Single sleep for the full pass. No per-second ticks: the OS
-        //    chronometer handles the visual countdown natively.
+        // 5) Tick the in-app StateFlow every second so the dashboard hero shows
+        //    a live countdown. This does NOT push the notification (the OS
+        //    chronometer owns that) - it only updates _passRemaining for the
+        //    in-process UI. At 0:00, snap back.
         serviceScope.launch {
-            delay(EMERGENCY_PASS_SECONDS * 1_000L)
+            var remaining = EMERGENCY_PASS_SECONDS
+            while (remaining > 0 && shouldRun && isPassActive) {
+                delay(1_000)
+                remaining--
+                _passRemaining.value = remaining
+            }
             // Snap back only if the shield is still up and the pass wasn't
             // cancelled by a manual stop (teardown clears isPassActive).
             if (shouldRun && isPassActive) {
@@ -1012,9 +1050,11 @@ class FocusVpnService : VpnService() {
         // Cancel any existing timer for this package (re-tap = reset window).
         tempAllowTimers[packageName]?.cancel()
 
-        // Add to the in-memory allow set.
+        // Add to the in-memory allow set + record the expiry for the UI.
         tempAllowedApps.value = tempAllowedApps.value + packageName
-        AppLog.d("tempAllow: $packageName allowed for ${durationMs}ms")
+        val expiry = System.currentTimeMillis() + durationMs
+        _tempAllowExpiry.value = _tempAllowExpiry.value + (packageName to expiry)
+        AppLog.d("tempAllow: $packageName allowed for ${durationMs}ms (expiry=$expiry)")
 
         // Hot-swap the tunnel so the change takes effect immediately.
         refreshRules()
@@ -1040,6 +1080,7 @@ class FocusVpnService : VpnService() {
         }
         tempAllowedApps.value = current - packageName
         tempAllowTimers.remove(packageName)
+        _tempAllowExpiry.value = _tempAllowExpiry.value - packageName
         AppLog.d("tempAllow: $packageName revoked - re-blocking")
         refreshRules()
     }
