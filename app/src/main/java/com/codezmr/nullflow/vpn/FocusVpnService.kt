@@ -73,6 +73,8 @@ class FocusVpnService : VpnService() {
         const val ACTION_TEMP_ALLOW_APP = "com.codezmr.nullflow.action.TEMP_ALLOW_APP"
         // Per-app temporary revoke: re-block an app before its allow expires.
         const val ACTION_TEMP_REVOKE_APP = "com.codezmr.nullflow.action.TEMP_REVOKE_APP"
+        // Remove an app from the saved focus mode (persistent Room delete).
+        const val ACTION_REMOVE_APP_FROM_MODE = "com.codezmr.nullflow.action.REMOVE_APP_FROM_MODE"
         const val EXTRA_PROFILE_ID = "profile_id"
         const val EXTRA_PACKAGE_NAME = "package_name"
         const val EXTRA_DURATION_MS = "duration_ms"
@@ -149,6 +151,15 @@ class FocusVpnService : VpnService() {
         fun tempRevokeAppIntent(context: Context, packageName: String): Intent =
             Intent(context, FocusVpnService::class.java)
                 .setAction(ACTION_TEMP_REVOKE_APP)
+                .putExtra(EXTRA_PACKAGE_NAME, packageName)
+
+        /**
+         * Build the ACTION_REMOVE_APP_FROM_MODE intent: permanently delete an
+         * app from the active focus mode (Room) and hot-swap the tunnel.
+         */
+        fun removeAppFromModeIntent(context: Context, packageName: String): Intent =
+            Intent(context, FocusVpnService::class.java)
+                .setAction(ACTION_REMOVE_APP_FROM_MODE)
                 .putExtra(EXTRA_PACKAGE_NAME, packageName)
 
         private val _heatState = kotlinx.coroutines.flow.MutableStateFlow(HeatState(0, 0f))
@@ -547,6 +558,17 @@ class FocusVpnService : VpnService() {
                 } else {
                     AppLog.d("ACTION_TEMP_REVOKE_APP received → $pkg (startId=$startId)")
                     revokeTempAllow(pkg)
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_REMOVE_APP_FROM_MODE -> {
+                // Remove an app from the saved focus mode (persistent).
+                val pkg = intent.getStringExtra(EXTRA_PACKAGE_NAME)
+                if (pkg.isNullOrBlank()) {
+                    AppLog.w("ACTION_REMOVE_APP_FROM_MODE: missing package name - no-op")
+                } else {
+                    AppLog.d("ACTION_REMOVE_APP_FROM_MODE received → $pkg (startId=$startId)")
+                    removeAppFromMode(pkg)
                 }
                 return START_NOT_STICKY
             }
@@ -1083,6 +1105,45 @@ class FocusVpnService : VpnService() {
         _tempAllowExpiry.value = _tempAllowExpiry.value - packageName
         AppLog.d("tempAllow: $packageName revoked - re-blocking")
         refreshRules()
+    }
+
+    /**
+     * Permanently remove [packageName] from the active focus mode (Room delete)
+     * and hot-swap the tunnel so it's no longer blocked. This is a PERSISTENT
+     * change to the saved mode (unlike a temp-allow). Also clears any in-flight
+     * temp-allow for the package. No-op if the app isn't in the active mode.
+     */
+    private fun removeAppFromMode(packageName: String) {
+        if (!isShieldRunning) {
+            AppLog.w("removeAppFromMode: shield not running - no-op ($packageName)")
+            return
+        }
+        serviceScope.launch {
+            val dao = FocusDatabase.get(this@FocusVpnService).focusDao()
+            val profile = dao.observeActiveProfile().first()
+            if (profile == null) {
+                AppLog.w("removeAppFromMode: no active profile - no-op")
+                return@launch
+            }
+            val target = dao.getBlockedApps(profile.id).firstOrNull {
+                it.packageName == packageName
+            }
+            if (target == null) {
+                AppLog.w("removeAppFromMode: $packageName not in active mode - no-op")
+                return@launch
+            }
+            dao.deleteBlockedApp(target.id)
+            AppLog.d("removeAppFromMode: deleted ${target.appName} ($packageName) from '${profile.name}'")
+
+            // Clear any in-flight temp-allow for this package (it's gone now).
+            tempAllowTimers[packageName]?.cancel()
+            tempAllowTimers.remove(packageName)
+            tempAllowedApps.value = tempAllowedApps.value - packageName
+            _tempAllowExpiry.value = _tempAllowExpiry.value - packageName
+
+            // Hot-swap the tunnel so the change takes effect immediately.
+            refreshRules()
+        }
     }
 
     /**

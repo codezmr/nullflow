@@ -20,6 +20,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -475,6 +477,7 @@ fun MainScreen(
                                 context = context,
                                 apps = blockedApps,
                                 isActive = isActive,
+                                passActive = passRemaining > 0,
                                 tempAllowExpiry = tempAllowExpiry
                             )
                         }
@@ -1616,6 +1619,7 @@ private fun BlockedAppPauseList(
     context: android.content.Context,
     apps: List<com.codezmr.nullflow.data.BlockedApp>,
     isActive: Boolean,
+    passActive: Boolean,
     tempAllowExpiry: Map<String, Long>
 ) {
     // Ticking clock (1s) so per-app countdowns update live.
@@ -1623,14 +1627,18 @@ private fun BlockedAppPauseList(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         apps.forEachIndexed { index, app ->
+            // During a Tactical Pass the tunnel is closed, so ALL apps pass
+            // through - per-app controls are meaningless. Show UNBLOCKED and
+            // disable every interaction.
             val expiry = tempAllowExpiry[app.packageName]
-            val isPaused = isActive && expiry != null
+            val isPaused = isActive && !passActive && expiry != null
             val remainingMs = if (isPaused) (expiry!! - now).coerceAtLeast(0L) else 0L
 
             BlockedAppPauseRow(
                 context = context,
                 app = app,
                 isActive = isActive,
+                passActive = passActive,
                 isPaused = isPaused,
                 remainingMs = remainingMs,
                 onPickDuration = { minutes ->
@@ -1650,9 +1658,9 @@ private fun BlockedAppPauseList(
                 onRemove = {
                     context.startService(
                         com.codezmr.nullflow.vpn.FocusVpnService
-                            .tempRevokeAppIntent(context, app.packageName)
+                            .removeAppFromModeIntent(context, app.packageName)
                     )
-                    AppLog.d("Per-app remove: ${app.packageName}")
+                    AppLog.d("Per-app remove from mode: ${app.packageName}")
                 }
             )
             if (index != apps.lastIndex) {
@@ -1669,11 +1677,13 @@ private fun BlockedAppPauseList(
  * - control = "Pause" button (collapsed) → expands to duration chips
  * - control = live countdown + "Resume" (when paused)
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BlockedAppPauseRow(
     context: android.content.Context,
     app: com.codezmr.nullflow.data.BlockedApp,
     isActive: Boolean,
+    passActive: Boolean,
     isPaused: Boolean,
     remainingMs: Long,
     onPickDuration: (Int) -> Unit,
@@ -1682,7 +1692,13 @@ private fun BlockedAppPauseRow(
 ) {
     // Which app's duration picker is open (local UI state).
     var showPicker by remember { mutableStateOf(false) }
+    // Two-tap confirm for the destructive "Remove" action.
+    var removeConfirm by remember { mutableStateOf(false) }
     val painter = rememberAppIconPainter(context, app.packageName)
+
+    // During a pass the tunnel is closed: every app is effectively unblocked
+    // and all per-app controls are disabled.
+    val controlsEnabled = isActive && !passActive
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -1711,27 +1727,36 @@ private fun BlockedAppPauseRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (isPaused) {
-                    val totalSec = (remainingMs / 1000).toInt()
-                    val m = totalSec / 60
-                    val s = totalSec % 60
-                    Text(
-                        text = String.format("Allowed · %02d:%02d left", m, s),
+                when {
+                    isPaused -> {
+                        val totalSec = (remainingMs / 1000).toInt()
+                        val m = totalSec / 60
+                        val s = totalSec % 60
+                        Text(
+                            text = String.format("Allowed · %02d:%02d left", m, s),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFFFFB300)
+                        )
+                    }
+                    passActive -> Text(
+                        text = "UNBLOCKED",
                         fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFFFFB300)
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp,
+                        color = Color(0xFFFFB300).copy(alpha = 0.8f)
                     )
-                } else {
-                    Text(
+                    else -> Text(
                         text = if (isActive) "Blocked" else "In mode",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                     )
                 }
             }
-            // Control: Pause button, or Resume button when paused.
-            if (!isActive) {
-                // Shield off: no controls.
+            // Control: none when off or during a pass; Resume when paused;
+            // otherwise the Pause button.
+            if (!controlsEnabled) {
+                // Shield off OR Tactical Pass active: no controls.
             } else if (isPaused) {
                 Box(
                     modifier = Modifier
@@ -1754,7 +1779,11 @@ private fun BlockedAppPauseRow(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color(0xFF1A1F2E))
                         .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(8.dp))
-                        .clickable { showPicker = !showPicker }
+                        .clickable {
+                            showPicker = !showPicker
+                            // Closing the picker also cancels a pending confirm.
+                            if (!showPicker) removeConfirm = false
+                        }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Text(
@@ -1767,14 +1796,17 @@ private fun BlockedAppPauseRow(
             }
         }
 
-        // Duration picker (only when active, not paused, and picker open).
-        if (isActive && !isPaused && showPicker) {
+        // Duration picker (only when controls are enabled, not paused, and
+        // picker open). FlowRow wraps the chips onto a second line so the
+        // trailing "Remove" button is never pushed off-screen.
+        if (controlsEnabled && !isPaused && showPicker) {
             Spacer(Modifier.height(8.dp))
-            Row(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 44.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 PAUSE_DURATION_MINUTES.forEach { minutes ->
                     Box(
@@ -1796,20 +1828,28 @@ private fun BlockedAppPauseRow(
                         )
                     }
                 }
-                // "Remove" sentinel: re-block immediately (no pause window).
+                // "Remove": permanently delete the app from the saved mode.
+                // Two-tap confirm to guard against accidental data loss.
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF2A1A1A))
+                        .background(
+                            if (removeConfirm) Color(0xFF7D2E2E) else Color(0xFF2A1A1A)
+                        )
                         .border(1.dp, Color(0xFF7D2E2E), RoundedCornerShape(6.dp))
                         .clickable {
-                            onRemove()
-                            showPicker = false
+                            if (removeConfirm) {
+                                onRemove()
+                                removeConfirm = false
+                                showPicker = false
+                            } else {
+                                removeConfirm = true
+                            }
                         }
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "Remove",
+                        text = if (removeConfirm) "Confirm?" else "Remove",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFFFF6B6B)
