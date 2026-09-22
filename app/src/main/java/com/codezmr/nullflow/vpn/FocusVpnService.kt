@@ -69,10 +69,17 @@ class FocusVpnService : VpnService() {
         const val ACTION_REFRESH_RULES = "com.codezmr.nullflow.action.REFRESH_RULES"
         // Tactical Pass: temporary 2-minute network leash.
         const val ACTION_EMERGENCY_PASS = "com.codezmr.nullflow.action.EMERGENCY_PASS"
+        // Per-app temporary allow: bypass the block for ONE app during a session.
+        const val ACTION_TEMP_ALLOW_APP = "com.codezmr.nullflow.action.TEMP_ALLOW_APP"
         const val EXTRA_PROFILE_ID = "profile_id"
+        const val EXTRA_PACKAGE_NAME = "package_name"
+        const val EXTRA_DURATION_MS = "duration_ms"
 
         /** Duration of the Tactical Pass in seconds. */
         const val EMERGENCY_PASS_SECONDS = 120
+
+        /** Default duration of a per-app temporary allow (2 minutes). */
+        const val TEMP_ALLOW_DEFAULT_MS = 120_000L
 
         /**
          * Extra on the notification content intent: when true, the dashboard
@@ -118,6 +125,23 @@ class FocusVpnService : VpnService() {
         fun emergencyPassIntent(context: Context): Intent =
             Intent(context, FocusVpnService::class.java)
                 .setAction(ACTION_EMERGENCY_PASS)
+
+        /**
+         * Build the ACTION_TEMP_ALLOW_APP intent: temporarily bypass the block
+         * for a single app during an active session. [durationMs] defaults to
+         * 2 minutes when null.
+         */
+        fun tempAllowAppIntent(
+            context: Context,
+            packageName: String,
+            durationMs: Long? = null
+        ): Intent =
+            Intent(context, FocusVpnService::class.java)
+                .setAction(ACTION_TEMP_ALLOW_APP)
+                .putExtra(EXTRA_PACKAGE_NAME, packageName)
+                .apply {
+                    if (durationMs != null) putExtra(EXTRA_DURATION_MS, durationMs)
+                }
 
         private val _heatState = kotlinx.coroutines.flow.MutableStateFlow(HeatState(0, 0f))
 
@@ -274,6 +298,21 @@ class FocusVpnService : VpnService() {
     @Volatile
     private var passStartedRealtime: Long = 0L
 
+    /**
+     * Packages currently under a per-app temporary allow (in-memory only).
+     * These are filtered OUT of the blackhole rules in establishTunnel, so the
+     * app's traffic passes through while the rest of the shield stays up.
+     * Never persisted to Room - the saved focus mode is never modified.
+     */
+    private val tempAllowedApps = kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>())
+
+    /**
+     * Expiry timers for each temp-allowed package (pkg → Job). When a timer
+     * fires, the package is removed from tempAllowedApps and the tunnel is
+     * hot-swapped back to blocking it. All jobs are cancelled in teardown().
+     */
+    private val tempAllowTimers = mutableMapOf<String, Job>()
+
     override fun onCreate() {
         super.onCreate()
         AppLog.d("FocusVpnService.onCreate")
@@ -309,6 +348,12 @@ class FocusVpnService : VpnService() {
         // coroutine is also killed by serviceScope.cancel() below.
         isPassActive = false
         _passRemaining.value = 0
+        // Clear any in-flight per-app temp-allows. The expiry timers are
+        // children of serviceScope (cancelled below), so we only clear the
+        // in-memory set + map. Room is never touched, so the saved mode is
+        // intact for the next session.
+        tempAllowedApps.value = emptySet()
+        tempAllowTimers.clear()
         // 1) Stop the timer loop + packet reader. serviceScope.cancel() also
         //      cancels readerJob (a child), so we only clear the reference.
         serviceScope.cancel()
@@ -463,6 +508,18 @@ class FocusVpnService : VpnService() {
                 handleEmergencyPass()
                 return START_NOT_STICKY
             }
+            ACTION_TEMP_ALLOW_APP -> {
+                // Per-app temporary allow: bypass the block for ONE app.
+                val pkg = intent.getStringExtra(EXTRA_PACKAGE_NAME)
+                val durationMs = intent.getLongExtra(EXTRA_DURATION_MS, TEMP_ALLOW_DEFAULT_MS)
+                if (pkg.isNullOrBlank()) {
+                    AppLog.w("ACTION_TEMP_ALLOW_APP: missing package name - no-op")
+                } else {
+                    AppLog.d("ACTION_TEMP_ALLOW_APP received → $pkg for ${durationMs}ms (startId=$startId)")
+                    handleTempAllowApp(pkg, durationMs)
+                }
+                return START_NOT_STICKY
+            }
             // A NULL intent means the system is re-delivering after the process
             // died (sticky restart). We must NOT re-establish the tunnel in that
             // case - that's what kept bringing the VPN icon back after OFF.
@@ -585,7 +642,15 @@ class FocusVpnService : VpnService() {
             AppLog.w("tunnel: IPv6 route FAILED (falling back to IPv4-only) - " +
                 "IPv6/QUIC traffic may bypass the shield :: ${e.message}")
         }
+        // Per-app temporary allow: skip any package currently under an active
+        // temp-allow so its traffic passes through while the rest stay blocked.
+        // This is in-memory only - the saved focus mode in Room is untouched.
+        val tempAllowed = tempAllowedApps.value
         for (pkg in packages) {
+            if (pkg in tempAllowed) {
+                AppLog.d("  temp-allowed (bypassing block): $pkg")
+                continue
+            }
             try {
                 builder.addAllowedApplication(pkg)
                 AppLog.d("  allowed app: $pkg")
@@ -919,6 +984,64 @@ class FocusVpnService : VpnService() {
         } catch (e: Exception) {
             AppLog.e("snapBack: failed to send 'Shield Activated' notification", e)
         }
+    }
+
+    /**
+     * Per-app temporary allow: bypass the block for [packageName] for
+     * [durationMs], then automatically re-block it.
+     *
+     * - Adds the package to the in-memory tempAllowedApps set (Room is never
+     *   touched, so the saved focus mode is preserved).
+     * - Hot-swaps the tunnel so the app's traffic passes through immediately.
+     * - Launches a one-shot timer that revokes the allow on expiry (re-blocks).
+     *
+     * Re-tapping an already-allowed app RESETS its timer (extends the window)
+     * rather than stacking a second timer.
+     */
+    private fun handleTempAllowApp(packageName: String, durationMs: Long) {
+        if (!isShieldRunning) {
+            AppLog.w("handleTempAllowApp: shield not running - no-op ($packageName)")
+            return
+        }
+        // Only meaningful if the app is actually in the current blocked set.
+        if (packageName !in blockedPackages) {
+            AppLog.w("handleTempAllowApp: $packageName not in blocked set - no-op")
+            return
+        }
+
+        // Cancel any existing timer for this package (re-tap = reset window).
+        tempAllowTimers[packageName]?.cancel()
+
+        // Add to the in-memory allow set.
+        tempAllowedApps.value = tempAllowedApps.value + packageName
+        AppLog.d("tempAllow: $packageName allowed for ${durationMs}ms")
+
+        // Hot-swap the tunnel so the change takes effect immediately.
+        refreshRules()
+
+        // Schedule the auto-revoke.
+        tempAllowTimers[packageName] = serviceScope.launch {
+            delay(durationMs)
+            // Only revoke if the shield is still up (teardown cancels this job).
+            if (shouldRun) {
+                revokeTempAllow(packageName)
+            }
+        }
+    }
+
+    /**
+     * Remove [packageName] from the temp-allow set and re-block it by
+     * hot-swapping the tunnel. No-op if the package isn't currently allowed.
+     */
+    private fun revokeTempAllow(packageName: String) {
+        val current = tempAllowedApps.value
+        if (packageName !in current) {
+            return
+        }
+        tempAllowedApps.value = current - packageName
+        tempAllowTimers.remove(packageName)
+        AppLog.d("tempAllow: $packageName revoked - re-blocking")
+        refreshRules()
     }
 
     /**

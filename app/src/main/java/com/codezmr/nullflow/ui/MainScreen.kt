@@ -435,8 +435,23 @@ fun MainScreen(
                             BlockedAppIconRow(
                                 context = context,
                                 apps = blockedApps,
-                                bg = Color(0xFF12151C)
+                                bg = Color(0xFF12151C),
+                                onAppTap = if (isActive) { pkg ->
+                                    context.startService(
+                                        com.codezmr.nullflow.vpn.FocusVpnService
+                                            .tempAllowAppIntent(context, pkg)
+                                    )
+                                    AppLog.d("Per-app temp allow tapped: $pkg")
+                                } else null
                             )
+                            if (isActive) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "Tap an app to allow it for 2 min",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                                )
+                            }
                         }
                         if (runningSession != null) {
                             Spacer(Modifier.height(16.dp))
@@ -1562,7 +1577,8 @@ private fun createDefaultProfile(dao: FocusDao): Long {
 private fun BlockedAppIconRow(
     context: android.content.Context,
     apps: List<com.codezmr.nullflow.data.BlockedApp>,
-    bg: Color
+    bg: Color,
+    onAppTap: ((String) -> Unit)? = null
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         LazyRow(
@@ -1570,17 +1586,30 @@ private fun BlockedAppIconRow(
         ) {
             items(apps, key = { it.packageName }) { app ->
                 val painter = rememberAppIconPainter(context, app.packageName)
+                // 48dp touch target (Material spec) around the 24dp icon. Tapping
+                // an icon fires a per-app temporary allow (bypass block for 2m).
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1E2430))
+                        .size(48.dp)
+                        .then(
+                            if (onAppTap != null)
+                                Modifier.clickable { onAppTap(app.packageName) }
+                            else Modifier
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painter,
-                        contentDescription = app.appName,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF1E2430))
+                    ) {
+                        Image(
+                            painter = painter,
+                            contentDescription = app.appName,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
         }
