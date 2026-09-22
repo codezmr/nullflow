@@ -12,7 +12,7 @@ NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6).
 - **IPv4 + IPv6** - both address families are routed into the tunnel, so apps can't bypass via IPv6
 - **Split tunneling** - only blocked apps' traffic enters the tunnel (kernel routes by UID); allowed apps bypass it entirely, so there's zero overhead for the rest of your phone
 - **Scheduled sessions** - recurring windows auto start/stop the shield via exact `AlarmManager` alarms (survive reboot, timezone/DST-safe)
-- **Per-app temp allow** - bypass the block for a single app during a session (in-memory only, auto re-blocks after 2 min, never edits the saved mode)
+- **Per-app temp allow** - bypass the block for a single app during a session for 2/5/10/20/30 min (in-memory only, auto re-blocks on expiry, never edits the saved mode)
 
 ## Features
 
@@ -21,7 +21,8 @@ NullFlow uses Android's `VpnService` API to create a local tunnel (IPv4 + IPv6).
 | Reactor Core | Hero toggle with live intercept heat - color and pulse driven by real-time blocking activity |
 | Scheduled Sessions | Recurring focus windows - auto start/stop the shield on a schedule (e.g. weekdays 6-9 PM) |
 | Tactical Pass (BETA) | 2-minute network leash - temporarily pause the shield without ending your session |
-| Per-app temp allow | Tap a blocked app to bypass its block for 2 min (e.g. grab an OTP) without ending the session or editing the mode |
+| Per-app temp allow | Pause a single blocked app for 2/5/10/20/30 min (e.g. grab an OTP) without ending the session or editing the mode |
+| Remove app from mode | Permanently remove an app from the saved focus mode from the active session (two-tap confirm) |
 | Focus modes | Create multiple profiles (e.g. "Deep Work", "No Social") |
 | App picker | Search and select which apps to silence per mode |
 | Quick Settings tile | Toggle the shield from the notification shade (live timer + intercept count) |

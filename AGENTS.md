@@ -88,8 +88,8 @@ app/src/main/java/com/codezmr/nullflow/
 
 ### Room Database
 
-- Current version: **v5**. Migrations must be **non-destructive** (no `fallbackToDestructiveMigration`).
-- Entities: `FocusProfile`, `BlockedApp`, `FocusSession`, `InterceptLog`.
+- Current version: **v6**. Migrations must be **non-destructive** (no `fallbackToDestructiveMigration`).
+- Entities: `FocusProfile`, `BlockedApp`, `FocusSession`, `InterceptLog`, `FocusSchedule`.
 - `InterceptLog` is the source of truth for intercept counts (not a per-app counter column).
 - Batch inserts: use `insertInterceptLogs(List<InterceptLog>)` for performance.
 
