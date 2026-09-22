@@ -96,7 +96,22 @@
                 android:maxLines="1"
                 android:ellipsize="end" />
 
+            <!-- Tactical Pass countdown. Hidden by default; shown (and driven
+                 natively by the OS) only while a pass is active. Uses the
+                 elapsedRealtime timebase via RemoteViews.setChronometer. -->
+            <Chronometer
+                android:id="@+id/hud_countdown_timer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:textColor="#FFFFB300"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:maxLines="1" />
+
             <TextView
+                android:id="@+id/tv_timer_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
