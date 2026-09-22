@@ -4,6 +4,8 @@
 
 **Absolute silence. A zero-trust focus shield for Android.**
 
+**Landing page:** [shutupchat.com/nullflow](https://shutupchat.com/nullflow)
+
 [![Android](https://img.shields.io/badge/Android-11%2B-3DDC84?style=for-the-badge&logo=android)](#requirements)
 [![Root](https://img.shields.io/badge/Root-Not_Required-2E3440?style=for-the-badge)](#requirements)
 [![License](https://img.shields.io/badge/License-MIT-4C566A?style=for-the-badge)](#license)
@@ -18,7 +20,7 @@ NullFlow silently drops their network traffic into the void through a local VPN 
 
 ## 🕳️ The Mechanics of Silence
 
-NullFlow leverages Android's `VpnService` API to create a local black hole (IPv4 + IPv6). When active, DNS queries and TCP/UDP connections from blocked apps are intercepted and dropped at the socket level. 
+NullFlow leverages Android's `VpnService` API to create a local black hole (IPv4 + IPv6). When active, DNS queries and TCP/UDP connections from blocked apps are intercepted and dropped at the socket level.
 
 The apps still function locally, but their feeds, notifications, and updates are entirely cut off.
 
@@ -64,7 +66,15 @@ The apps still function locally, but their feeds, notifications, and updates are
 ## 🚀 Deployment Protocol
 
 <details>
-<summary><b>Option A: Quick Install (GitHub Releases)</b></summary>
+<summary><b>Option A: From the Landing Page</b></summary>
+<br>
+
+The [landing page](https://shutupchat.com/nullflow) has a "Download APK" button that scrolls to the deployment protocol (compile from source or grab a pre-built release).
+
+</details>
+
+<details>
+<summary><b>Option B: Quick Install (GitHub Releases)</b></summary>
 <br>
 
 1. Navigate to [Releases](https://github.com/codezmr/nullflow/releases).
@@ -75,7 +85,7 @@ The apps still function locally, but their feeds, notifications, and updates are
 </details>
 
 <details>
-<summary><b>Option B: Compile from Source</b></summary>
+<summary><b>Option C: Compile from Source</b></summary>
 <br>
 
 ```bash

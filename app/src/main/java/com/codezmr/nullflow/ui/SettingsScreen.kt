@@ -2,7 +2,13 @@ package com.codezmr.nullflow.ui
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,10 +44,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
@@ -56,6 +70,9 @@ private val SfgBorder = Color(0xFF222733)
 private val SfgAccent = Color(0xFF00E5FF)
 private val SfgMuted = Color(0xFF808080)
 private val SfgText = Color(0xFFE6EAF0)
+private val SfgVoid = Color(0xFF050505)
+private val SfgGreen = Color(0xFF3DDC84)
+private val SfgGreenDark = Color(0xFF207A48)
 
 @Composable
 fun SettingsScreen(
@@ -344,13 +361,11 @@ fun SettingsScreen(
                 }
             }
 
-            // ---- ABOUT section ----
+            // ---- ABOUT section (redesigned) ----
             SectionHeader("ABOUT")
-            SettingCard {
-                SettingRow(
-                    title = "Version",
-                    subtitle = version
-                ) {
+            AboutCard(
+                version = version,
+                onVersionTap = {
                     val now = System.currentTimeMillis()
                     if (now - lastTapTime < 500) {
                         versionTaps++
@@ -363,40 +378,13 @@ fun SettingsScreen(
                         versionTaps = 1
                         lastTapTime = now
                     }
+                },
+                onOpenLanding = {
+                    openUrl(context, "https://shutupchat.com/nullflow")
+                },
+                onOpenTelegram = {
+                    openUrl(context, "https://t.me/nullflow_app")
                 }
-                SettingDivider()
-                SettingRow(
-                    title = "Report bug or feedback",
-                    subtitle = "Join our Telegram community"
-                ) {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/nullflow_app"))
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        AppLog.e("Settings: failed to open Telegram", e)
-                    }
-                }
-                SettingDivider()
-                SettingRow(
-                    title = "Privacy",
-                    subtitle = "All data stays on your device"
-                ) { }
-                SettingDivider()
-                SettingRow(
-                    title = "Open source",
-                    subtitle = "MIT License"
-                ) { }
-            }
-
-            // ---- Crafted by footer ----
-            Text(
-                text = "Crafted by CodeZMR",
-                fontSize = 12.sp,
-                color = SfgMuted.copy(alpha = 0.4f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp, bottom = 8.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
 
             // ---- DEVELOPER section (hidden) ----
@@ -643,6 +631,233 @@ private fun SettingSwitchRow(
                 uncheckedTrackColor = Color(0xFF1E1E1E)
             )
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// About card (redesigned)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun AboutCard(
+    version: String,
+    onVersionTap: () -> Unit,
+    onOpenLanding: () -> Unit,
+    onOpenTelegram: () -> Unit
+) {
+    val transition = rememberInfiniteTransition(label = "about")
+    val ringRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(15000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ring"
+    )
+    val pulse by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF0D1410), SfgVoid)
+                )
+            )
+            .border(1.dp, SfgGreen.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 20.dp, vertical = 24.dp)
+    ) {
+        // Hero: rotating reactor ring + shield glyph
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(96.dp).rotate(ringRotation)) {
+                val center = Offset(size.width / 2, size.height / 2)
+                val radius = size.minDimension / 2 - 4.dp.toPx()
+                drawCircle(
+                    color = SfgGreen.copy(alpha = 0.3f),
+                    radius = radius,
+                    center = center,
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                )
+                repeat(24) { i ->
+                    val angle = (i * 15f) * Math.PI / 180f
+                    val tickRadius = radius - 6.dp.toPx()
+                    drawLine(
+                        color = SfgGreen.copy(alpha = 0.5f),
+                        start = center + Offset(
+                            (tickRadius * cos(angle)).toFloat(),
+                            (tickRadius * sin(angle)).toFloat()
+                        ),
+                        end = center + Offset(
+                            ((tickRadius - 4.dp.toPx()) * cos(angle)).toFloat(),
+                            ((tickRadius - 4.dp.toPx()) * sin(angle)).toFloat()
+                        ),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(SfgVoid, SfgGreenDark.copy(alpha = 0.6f))
+                        )
+                    )
+                    .border(1.dp, SfgGreen.copy(alpha = pulse), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "NF",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    color = SfgGreen
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "NullFlow",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = SfgText,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Absolute Silence",
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 2.sp,
+            color = SfgGreen,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "A zero-trust focus shield for Android. Select the apps that distract you, flip the switch, and their network traffic is silently dropped into the void.",
+            fontSize = 12.sp,
+            color = SfgMuted,
+            lineHeight = 17.sp,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        // Stats row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(SfgCard)
+                .border(1.dp, SfgBorder, RoundedCornerShape(12.dp))
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            AboutStat("No Root")
+            AboutStat("Local Only")
+            AboutStat("MIT")
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Action rows
+        AboutActionRow(
+            label = "Landing page",
+            value = "shutupchat.com/nullflow",
+            onClick = onOpenLanding
+        )
+        AboutActionRow(
+            label = "Report bug or feedback",
+            value = "t.me/nullflow_app",
+            onClick = onOpenTelegram
+        )
+        AboutActionRow(
+            label = "Privacy",
+            value = "All data stays on your device",
+            onClick = {}
+        )
+        AboutActionRow(
+            label = "Version",
+            value = version,
+            onClick = onVersionTap
+        )
+    }
+}
+
+@Composable
+private fun AboutStat(label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace,
+            color = SfgGreen
+        )
+    }
+}
+
+@Composable
+private fun AboutActionRow(
+    label: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = SfgText
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = value,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                color = SfgMuted
+            )
+        }
+        Text(
+            text = "›",
+            fontSize = 18.sp,
+            color = SfgMuted
+        )
+    }
+}
+
+private fun openUrl(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    } catch (e: Exception) {
+        AppLog.e("Settings: failed to open $url", e)
     }
 }
 
