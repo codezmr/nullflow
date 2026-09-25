@@ -53,10 +53,9 @@ object AppLog {
         if (initialized) return
         synchronized(this) {
             if (initialized) return
-            // File logging defaults ON in debug builds; the Settings toggle
-            // (fileLoggingEnabled) is read on first init and on every toggle.
-            fileLogging = BuildConfig.DEBUG &&
-                com.codezmr.nullflow.data.Settings.get(context).fileLoggingEnabled
+            // File logging follows the Settings toggle (fileLoggingEnabled),
+            // which is OFF by default.
+            fileLogging = com.codezmr.nullflow.data.Settings.get(context).fileLoggingEnabled
             d("=== NullFlow log started ===")
             d("app version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             d("android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
@@ -68,7 +67,7 @@ object AppLog {
 
     /** Enable/disable file logging at runtime (Settings toggle). */
     fun setFileLogging(enabled: Boolean) {
-        fileLogging = enabled && BuildConfig.DEBUG
+        fileLogging = enabled
         d("file logging: ${if (fileLogging) "ON" else "OFF"}")
     }
 

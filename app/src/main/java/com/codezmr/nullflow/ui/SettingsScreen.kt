@@ -2,12 +2,6 @@ package com.codezmr.nullflow.ui
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,6 +49,7 @@ import kotlin.math.sin
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codezmr.nullflow.AppLog
@@ -601,9 +595,16 @@ private fun SettingSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    // The whole row is the tap target: the M3 Switch in this theme has no
+    // clickable indication of its own, so tapping the switch area did nothing.
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable {
+                AppLog.d("Settings: switch row tapped '$title' (checked=$checked)")
+                onCheckedChange(!checked)
+            }
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -623,7 +624,8 @@ private fun SettingSwitchRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = {},
+            enabled = false,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color(0xFF0A0C10),
                 checkedTrackColor = SfgAccent,
@@ -638,6 +640,66 @@ private fun SettingSwitchRow(
 // About card (redesigned)
 // ---------------------------------------------------------------------------
 
+/**
+ * The Reactor Core (static): a tick-mark ring around an "NF" core.
+ * The animated version lives on the onboarding welcome screen
+ * (see OnboardingScreen.kt).
+ */
+@Composable
+fun ReactorCore(coreSize: Dp = 96.dp) {
+    Box(
+        modifier = Modifier.size(coreSize),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(coreSize)) {
+            val center = Offset(size.width / 2, size.height / 2)
+            val radius = size.minDimension / 2 - 4.dp.toPx()
+            drawCircle(
+                color = SfgGreen.copy(alpha = 0.3f),
+                radius = radius,
+                center = center,
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+            )
+            repeat(24) { i ->
+                val angle = (i * 15f) * Math.PI / 180f
+                val tickRadius = radius - 6.dp.toPx()
+                drawLine(
+                    color = SfgGreen.copy(alpha = 0.5f),
+                    start = center + Offset(
+                        (tickRadius * cos(angle)).toFloat(),
+                        (tickRadius * sin(angle)).toFloat()
+                    ),
+                    end = center + Offset(
+                        ((tickRadius - 4.dp.toPx()) * cos(angle)).toFloat(),
+                        ((tickRadius - 4.dp.toPx()) * sin(angle)).toFloat()
+                    ),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .size(coreSize * 0.58f)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(SfgVoid, SfgGreenDark.copy(alpha = 0.6f))
+                    )
+                )
+                .border(1.dp, SfgGreen.copy(alpha = 0.55f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "NF",
+                fontSize = (coreSize.value * 0.19f).sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = SfgGreen
+            )
+        }
+    }
+}
+
 @Composable
 private fun AboutCard(
     version: String,
@@ -645,26 +707,6 @@ private fun AboutCard(
     onOpenLanding: () -> Unit,
     onOpenTelegram: () -> Unit
 ) {
-    val transition = rememberInfiniteTransition(label = "about")
-    val ringRotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(15000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring"
-    )
-    val pulse by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse"
-    )
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -677,59 +719,15 @@ private fun AboutCard(
             .border(1.dp, SfgGreen.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
             .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
-        // Hero: rotating reactor ring + shield glyph
+        // Hero: static reactor core (the animated version lives on the
+        // onboarding welcome screen).
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(96.dp),
             contentAlignment = Alignment.Center
         ) {
-            Canvas(modifier = Modifier.size(96.dp).rotate(ringRotation)) {
-                val center = Offset(size.width / 2, size.height / 2)
-                val radius = size.minDimension / 2 - 4.dp.toPx()
-                drawCircle(
-                    color = SfgGreen.copy(alpha = 0.3f),
-                    radius = radius,
-                    center = center,
-                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-                )
-                repeat(24) { i ->
-                    val angle = (i * 15f) * Math.PI / 180f
-                    val tickRadius = radius - 6.dp.toPx()
-                    drawLine(
-                        color = SfgGreen.copy(alpha = 0.5f),
-                        start = center + Offset(
-                            (tickRadius * cos(angle)).toFloat(),
-                            (tickRadius * sin(angle)).toFloat()
-                        ),
-                        end = center + Offset(
-                            ((tickRadius - 4.dp.toPx()) * cos(angle)).toFloat(),
-                            ((tickRadius - 4.dp.toPx()) * sin(angle)).toFloat()
-                        ),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(SfgVoid, SfgGreenDark.copy(alpha = 0.6f))
-                        )
-                    )
-                    .border(1.dp, SfgGreen.copy(alpha = pulse), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "NF",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    color = SfgGreen
-                )
-            }
+            ReactorCore(coreSize = 96.dp)
         }
 
         Spacer(Modifier.height(16.dp))

@@ -7,13 +7,13 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,14 +49,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.font.FontFamily
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -419,70 +423,251 @@ private fun FeatureIcon(kind: String) {
     }
 }
 
+// ---- Reactor Core hero (welcome screen) ----
+private val ReactorGreen = Color(0xFF3DDC84)
+private val ReactorGreenDark = Color(0xFF207A48)
+private val ReactorVoid = Color(0xFF050505)
+private val PacketRed = Color(0xFFEF4444)
+
 /**
- * The hero: the app icon centered, with a continuous slow-expanding sonar
- * ripple behind it (signals the shield is an active, scanning entity).
+ * The hero: an animated Reactor Core.
+ *
+ * Layers (back to front):
+ *  1. Sonar ripple - a green ring that expands and fades, on repeat.
+ *  2. Orbit ring A - dashed, rotating clockwise.
+ *  3. Orbit ring B - solid, rotating counter-clockwise.
+ *  4. Tick ring - 24 ticks, slow rotation.
+ *  5. Core - radial-gradient disc with a pulsing border + "NF" glyph.
+ *  6. Packets - red dots that fly in from the edges and get absorbed by the
+ *     core (the "void" dropping traffic), with a glow flash on impact.
  */
 @Composable
 private fun SonarHero() {
-    val infiniteTransition = rememberInfiniteTransition(label = "HeroPulse")
-    val pulseScale by infiniteTransition.animateFloat(
+    val transition = rememberInfiniteTransition(label = "Reactor")
+    val rippleScale by transition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.5f,
+        targetValue = 1.55f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutLinearInEasing),
+            animation = tween(2400, easing = FastOutLinearInEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "Scale"
+        label = "rippleScale"
     )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
+    val rippleAlpha by transition.animateFloat(
+        initialValue = 0.5f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutLinearInEasing),
+            animation = tween(2400, easing = FastOutLinearInEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "Alpha"
+        label = "rippleAlpha"
+    )
+    val ringA by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(16000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ringA"
+    )
+    val ringB by transition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(11000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ringB"
+    )
+    val ticks by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(30000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ticks"
+    )
+    val corePulse by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "corePulse"
     )
 
+    // Packet system: each packet has a random angle, start radius, duration
+    // and phase offset. Progress is derived from the transition clock so the
+    // whole system is pure composition (no state writes per frame).
+    val clock by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "clock"
+    )
+    val packets = remember {
+        List(7) { i ->
+            PacketSpec(
+                angle = Math.random() * Math.PI * 2,
+                startRadiusFrac = 1.05f + Math.random().toFloat() * 0.25f,
+                durationFrac = 0.35f + Math.random().toFloat() * 0.3f,
+                phase = i / 7f
+            )
+        }
+    }
+
     Box(
-        modifier = Modifier.size(150.dp),
+        modifier = Modifier.size(190.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Animated sonar ripple (expands + fades, restarts).
+        // 1) Sonar ripple.
         Box(
             modifier = Modifier
                 .size(120.dp)
                 .graphicsLayer {
-                    scaleX = pulseScale
-                    scaleY = pulseScale
-                    alpha = pulseAlpha
+                    scaleX = rippleScale
+                    scaleY = rippleScale
+                    alpha = rippleAlpha
                 }
                 .clip(CircleShape)
-                .background(NeonCyan)
+                .border(2.dp, ReactorGreen, CircleShape)
         )
-        // Static hero circle + app icon on top.
+
+        // 2) Orbit ring A (dashed, clockwise).
+        Canvas(modifier = Modifier.size(150.dp).graphicsLayer { rotationZ = ringA }) {
+            val center = Offset(size.width / 2, size.height / 2)
+            val radius = size.minDimension / 2 - 2.dp.toPx()
+            val dash = 10.dp.toPx()
+            val gap = 7.dp.toPx()
+            val circumference = (2.0 * Math.PI * radius).toFloat()
+            var start = 0f
+            while (start < circumference) {
+                val end = (start + dash).coerceAtMost(circumference)
+                drawArc(
+                    color = ReactorGreen.copy(alpha = 0.35f),
+                    startAngle = (start / circumference) * 360f,
+                    sweepAngle = ((end - start) / circumference) * 360f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2, radius * 2),
+                    style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                )
+                start = end + gap
+            }
+        }
+
+        // 3) Orbit ring B (solid, counter-clockwise).
+        Canvas(modifier = Modifier.size(124.dp).graphicsLayer { rotationZ = ringB }) {
+            val center = Offset(size.width / 2, size.height / 2)
+            val radius = size.minDimension / 2 - 1.dp.toPx()
+            drawCircle(
+                color = ReactorGreen.copy(alpha = 0.4f),
+                radius = radius,
+                center = center,
+                style = Stroke(width = 1.dp.toPx())
+            )
+            // A bright "comet" dot riding this ring.
+            drawCircle(
+                color = ReactorGreen,
+                radius = 3.dp.toPx(),
+                center = Offset(center.x + radius, center.y)
+            )
+        }
+
+        // 4) Tick ring.
+        Canvas(modifier = Modifier.size(120.dp).graphicsLayer { rotationZ = ticks }) {
+            val center = Offset(size.width / 2, size.height / 2)
+            val radius = size.minDimension / 2 - 4.dp.toPx()
+            repeat(24) { i ->
+                val angle = (i * 15f) * Math.PI / 180f
+                val tickRadius = radius - 6.dp.toPx()
+                drawLine(
+                    color = ReactorGreen.copy(alpha = 0.5f),
+                    start = center + Offset(
+                        tickRadius * cos(angle).toFloat(),
+                        tickRadius * sin(angle).toFloat()
+                    ),
+                    end = center + Offset(
+                        (tickRadius - 4.dp.toPx()) * cos(angle).toFloat(),
+                        (tickRadius - 4.dp.toPx()) * sin(angle).toFloat()
+                    ),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+        }
+
+        // 5) Core.
         Box(
             modifier = Modifier
-                .size(120.dp)
+                .size(70.dp)
                 .clip(CircleShape)
                 .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(Color(0xFF1E1E24), Color(0xFF0C0C10))
+                    Brush.radialGradient(
+                        colors = listOf(ReactorVoid, ReactorGreenDark.copy(alpha = 0.6f))
                     )
                 )
-                .shadow(elevation = 14.dp, shape = CircleShape)
-                .padding(10.dp),
+                .border(1.dp, ReactorGreen.copy(alpha = corePulse), CircleShape)
+                .shadow(elevation = 14.dp, shape = CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = "NullFlow",
-                modifier = Modifier.size(72.dp)
+            Text(
+                text = "NF",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = ReactorGreen
             )
+        }
+
+        // 6) Packets flying into the void.
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val center = Offset(size.width / 2, size.height / 2)
+            val coreRadius = 35.dp.toPx()
+            val maxRadius = size.minDimension / 2
+            for (p in packets) {
+                val t = ((clock + p.phase) % 1f) / p.durationFrac
+                if (t > 1f) continue
+                // Ease-in: packets accelerate as they fall in.
+                val eased = t * t
+                val dist = (p.startRadiusFrac * maxRadius) * (1f - eased)
+                val pos = center + Offset(
+                    dist * cos(p.angle).toFloat(),
+                    dist * sin(p.angle).toFloat()
+                )
+                val alpha = if (t < 0.15f) t / 0.15f else (1f - t)
+                val dotRadius = 3.dp.toPx() * (1f - eased * 0.5f)
+                drawCircle(
+                    color = PacketRed.copy(alpha = alpha.coerceIn(0f, 1f)),
+                    radius = dotRadius,
+                    center = pos
+                )
+                // Impact flash when the packet hits the core.
+                if (t > 0.92f) {
+                    val flash = (t - 0.92f) / 0.08f
+                    drawCircle(
+                        color = ReactorGreen.copy(alpha = 0.5f * (1f - flash)),
+                        radius = coreRadius * (0.6f + flash * 0.5f),
+                        center = center,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+            }
         }
     }
 }
+
+private data class PacketSpec(
+    val angle: Double,
+    val startRadiusFrac: Float,
+    val durationFrac: Float,
+    val phase: Float
+)
 
 // ---------------------------------------------------------------------------
 // Step 2 - Mandatory Permissions (The Engine)
