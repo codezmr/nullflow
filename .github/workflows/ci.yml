@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [ master, dev ]
+    branches: [ master, dev, 'feature/*' ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ master, dev ]
 
@@ -22,15 +23,39 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug
+      # PR checks: lint (release config catches release-only issues) + debug
+      # build. No production signing secrets are injected here - the release
+      # build below only runs when the signing secrets exist (tagged releases).
+      - name: Run Lint (release) and Build Debug
+        run: ./gradlew :app:lintRelease :app:assembleDebug
 
-      - name: Run Lint
-        run: ./gradlew :app:lintDebug
+      - name: Build Signed Release (only when release secrets are present)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NULLFLOW_KEYSTORE_PASS: ${{ secrets.NULLFLOW_KEYSTORE_PASS }}
+          NULLFLOW_KEY_ALIAS: ${{ secrets.NULLFLOW_KEY_ALIAS }}
+          NULLFLOW_KEY_PASS: ${{ secrets.NULLFLOW_KEY_PASS }}
+        run: |
+          echo "${{ secrets.NULLFLOW_KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
+          ./gradlew :app:assembleRelease :app:bundleRelease
 
-      - name: Upload APK (on push to master)
+      - name: Upload Debug APK (on push to master)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: NullFlow-debug
           path: app/build/outputs/apk/debug/NullFlow.apk
+
+      - name: Upload Signed Release AAB (on tagged release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: NullFlow-release-aab
+          path: app/build/outputs/bundle/release/*.aab
+
+      - name: Upload Signed Release APK (on tagged release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: NullFlow-release-apk
+          path: app/build/outputs/apk/release/NullFlow.apk

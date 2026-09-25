@@ -15,6 +15,15 @@ class Settings private constructor(context: Context) {
         prefs.edit().putBoolean(KEY_ONBOARDED, true).apply()
     }
 
+    // ---- Play Store compliance: affirmative VPN consent ----
+    // Set only when the user explicitly taps "I Understand & Continue" on the
+    // VpnDisclosureScreen, BEFORE the OS VPN permission prompt is shown.
+    // Required by Google Play's VpnService policy (prominent disclosure with
+    // affirmative user action). Never set implicitly.
+    var vpnConsentGiven: Boolean
+        get() = prefs.getBoolean(KEY_VPN_CONSENT, false)
+        set(value) { prefs.edit().putBoolean(KEY_VPN_CONSENT, value).apply() }
+
     // ---- Shield ----
     var defaultProfileId: Long?
         get() = prefs.getLong(KEY_DEFAULT_PROFILE, -1L).takeIf { it != -1L }
@@ -65,6 +74,7 @@ class Settings private constructor(context: Context) {
 
     companion object {
         private const val KEY_ONBOARDED = "has_onboarded"
+        private const val KEY_VPN_CONSENT = "vpn_consent_given"
         private const val KEY_DEFAULT_PROFILE = "default_profile_id"
         private const val KEY_AUTO_START_BOOT = "auto_start_boot"
         private const val KEY_AUTO_STOP_MIN = "auto_stop_minutes"

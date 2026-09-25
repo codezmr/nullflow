@@ -17,14 +17,14 @@ android {
     }
 
     signingConfigs {
-        getByName("debug").also {
-            // Reuse debug key for release (GitHub distribution only)
-        }
         create("release") {
-            storeFile = file("../local.keystore")
-            storePassword = System.getenv("KEYSTORE_PASS") ?: "android"
-            keyAlias = "nullflow"
-            keyPassword = System.getenv("KEY_PASS") ?: "android"
+            // Release keystore lives OUTSIDE the repo (never committed).
+            // Credentials come from CI/local environment variables - no
+            // hardcoded passwords.
+            storeFile = file("release.keystore")
+            storePassword = System.getenv("NULLFLOW_KEYSTORE_PASS")
+            keyAlias = System.getenv("NULLFLOW_KEY_ALIAS")
+            keyPassword = System.getenv("NULLFLOW_KEY_PASS")
         }
     }
 
@@ -35,7 +35,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

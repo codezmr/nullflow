@@ -172,6 +172,16 @@ fun OnboardingScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // ---- Play Store compliance gate ----
+    // The VPN disclosure screen is a HARD gate between the Hook (page 0) and
+    // the Permissions page (page 1). The user must read the disclosure and
+    // tap "I Understand & Continue" before they can ever reach the OS VPN
+    // permission prompt. Consent is persisted so the gate is never re-shown
+    // (and so MainScreen can verify it before any future OS prompt).
+    var showVpnDisclosure by remember {
+        mutableStateOf(!Settings.get(context).vpnConsentGiven)
+    }
+
     // ---- Pager ----
     val pagerState = rememberPagerState(pageCount = { 3 })
     var currentPage by remember { mutableIntStateOf(0) }
@@ -189,6 +199,23 @@ fun OnboardingScreen(
     // the page change before the guard fires, so the user briefly lands on
     // page 2. userScrollEnabled=false is a true hard block.)
     val userScrollEnabled = !(currentPage == 1 && !hasVpnPerm)
+
+    // ---- Play Store compliance: the disclosure screen overlays the pager
+    // until the user gives affirmative consent. It is a full-screen layer
+    // (not a pager page) so it cannot be swiped past. ----
+    if (showVpnDisclosure) {
+        VpnDisclosureScreen(
+            onAccept = {
+                Settings.get(context).vpnConsentGiven = true
+                showVpnDisclosure = false
+            },
+            onDecline = {
+                // Hard stop: declining means the user cannot proceed to the
+                // permissions page. They stay on the disclosure screen.
+            }
+        )
+        return
+    }
 
     Box(
         modifier = Modifier
@@ -312,6 +339,224 @@ fun OnboardingScreen(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Play Store compliance - VPN Disclosure Screen
+// ---------------------------------------------------------------------------
+//
+// Google Play's VpnService policy requires a prominent in-app disclosure with
+// AFFIRMATIVE user consent BEFORE the OS VPN permission prompt is shown.
+// This screen is that disclosure: it explains why the local tunnel exists,
+// guarantees no traffic is collected or redirected, and requires an explicit
+// "I Understand & Continue" tap. Declining is a hard stop (the user cannot
+// reach the permissions page).
+//
+// Design language matches the rest of onboarding: pure black background,
+// ambient glow, Canvas-drawn shield icon (no emoji, no vector assets),
+// neon-cyan CTA.
+
+@Composable
+private fun VpnDisclosureScreen(
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(PureBlack)
+    ) {
+        AmbientGlow()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Shield icon in a tinted ring (Canvas-drawn, matches FeatureIcon).
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(IcyBlue.copy(alpha = 0.10f))
+                    .border(1.dp, IcyBlue.copy(alpha = 0.35f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                DisclosureShieldIcon()
+            }
+
+            Spacer(Modifier.height(28.dp))
+
+            Text(
+                text = "Local Firewall Permission",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = StarkWhite,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                text = "NullFlow works as an on-device firewall. It cuts off internet access for the specific apps you choose to block, so their feeds and notifications stop reaching you.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = StarkWhite.copy(alpha = 0.75f),
+                textAlign = TextAlign.Center,
+                lineHeight = 24.sp
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = "To do this, Android requires a local network permission (shown as a VPN by the system). Before you grant it, here is exactly what it does and does not do:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = StarkWhite.copy(alpha = 0.55f),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // Compliance guarantee list.
+            DisclosureBullet("All filtering happens locally on this device.")
+            Spacer(Modifier.height(10.dp))
+            DisclosureBullet("Your traffic is never routed through external servers.")
+            Spacer(Modifier.height(10.dp))
+            DisclosureBullet("No network data is collected, logged, or stored.")
+            Spacer(Modifier.height(10.dp))
+            DisclosureBullet("Apps you do not block are completely unaffected.")
+        }
+
+        // Bottom action bar: Decline (hard stop) + affirmative consent CTA.
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(PureBlack)
+                .padding(horizontal = 26.dp)
+                .padding(bottom = 34.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Decline: text-only, de-emphasized. Tapping it is a hard stop
+                // (the user stays on this screen and cannot proceed).
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFF2A2F3A), RoundedCornerShape(16.dp))
+                        .clickable(onClick = onDecline)
+                        .height(56.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Not Now",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = StarkWhite.copy(alpha = 0.5f)
+                    )
+                }
+
+                // Affirmative consent: the only way forward.
+                Box(
+                    modifier = Modifier
+                        .weight(1.6f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(NeonCyan, Color(0xFF00B8D4))
+                            )
+                        )
+                        .shadow(
+                            elevation = 10.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            ambientColor = NeonCyan.copy(alpha = 0.3f),
+                            spotColor = NeonCyan.copy(alpha = 0.3f)
+                        )
+                        .clickable(onClick = onAccept)
+                        .height(56.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "I Understand & Continue",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0A0C10)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = "You can revoke this permission anytime in Android settings.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.35f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+/** One compliance guarantee row: check icon + single line of copy. */
+@Composable
+private fun DisclosureBullet(text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(26.dp)
+                .clip(CircleShape)
+                .background(NeonCyan.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(14.dp)) {
+                val stroke = 2.5.dp.toPx()
+                drawLine(
+                    color = NeonCyan,
+                    start = Offset(size.width * 0.1f, size.height * 0.52f),
+                    end = Offset(size.width * 0.4f, size.height * 0.82f),
+                    strokeWidth = stroke
+                )
+                drawLine(
+                    color = NeonCyan,
+                    start = Offset(size.width * 0.4f, size.height * 0.82f),
+                    end = Offset(size.width * 0.9f, size.height * 0.18f),
+                    strokeWidth = stroke
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = StarkWhite.copy(alpha = 0.8f)
+        )
+    }
+}
+
+/** Shield icon drawn with Canvas (matches the FeatureIcon style). */
+@Composable
+private fun DisclosureShieldIcon() {
+    val density = LocalDensity.current
+    val stroke = with(density) { 2.5.dp.toPx() }
+    val c = IcyBlue
+    Canvas(modifier = Modifier.size(34.dp)) {
+        val w = size.width
+        val h = size.height
+        drawLine(c, Offset(w * 0.5f, h * 0.10f), Offset(w * 0.85f, h * 0.26f), stroke)
+        drawLine(c, Offset(w * 0.5f, h * 0.10f), Offset(w * 0.15f, h * 0.26f), stroke)
+        drawLine(c, Offset(w * 0.15f, h * 0.26f), Offset(w * 0.15f, h * 0.52f), stroke)
+        drawLine(c, Offset(w * 0.85f, h * 0.26f), Offset(w * 0.85f, h * 0.52f), stroke)
+        drawLine(c, Offset(w * 0.15f, h * 0.52f), Offset(w * 0.5f, h * 0.90f), stroke)
+        drawLine(c, Offset(w * 0.85f, h * 0.52f), Offset(w * 0.5f, h * 0.90f), stroke)
     }
 }
 

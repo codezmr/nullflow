@@ -111,6 +111,12 @@ fun MainScreen(
     var showNoAppsWarning by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
 
+    // Play Store compliance: if the VPN permission was somehow revoked after
+    // onboarding (user pulled it from Android settings), the OS prompt must
+    // NOT fire without the in-app disclosure first. Show the disclosure
+    // overlay; only after affirmative consent do we launch the OS prompt.
+    var showVpnDisclosure by remember { mutableStateOf(false) }
+
     // OEM kill warning: shown when the OS killed the shield mid-session.
     // Backed by a Settings flag (set in MainActivity on reconciliation).
     // Tapping "Fix Settings" or "Dismiss" clears it.
@@ -220,7 +226,16 @@ fun MainScreen(
             val vpnReady = android.net.VpnService.prepare(context) == null
             if (!vpnReady) {
                 AppLog.w("TOGGLE → blocked, VPN permission not granted. Routing to grant.")
-                requestVpnPermission(context)
+                if (com.codezmr.nullflow.data.Settings.get(context).vpnConsentGiven) {
+                    // Consent already given during onboarding: go straight to
+                    // the OS prompt (the permission was likely revoked later).
+                    requestVpnPermission(context)
+                } else {
+                    // No recorded consent (edge case: consent flag missing).
+                    // Show the disclosure first - the OS prompt only fires
+                    // after the user taps "I Understand & Continue".
+                    showVpnDisclosure = true
+                }
                 return
             }
 
@@ -786,6 +801,165 @@ fun MainScreen(
                 }
             }
         }
+
+        // Play Store compliance: full-screen disclosure overlay. Shown only
+        // when the VPN permission is missing AND no consent was recorded.
+        // The OS prompt fires only after affirmative consent here.
+        if (showVpnDisclosure) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                VpnDisclosureOverlay(
+                    onAccept = {
+                        com.codezmr.nullflow.data.Settings.get(context).vpnConsentGiven = true
+                        showVpnDisclosure = false
+                        requestVpnPermission(context)
+                    },
+                    onDecline = { showVpnDisclosure = false }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Full-screen VPN disclosure overlay for the runtime (post-onboarding) path.
+ * Same compliance content as the onboarding disclosure, but dismissible via
+ * "Not Now" (the user simply stays on the dashboard with the shield off).
+ */
+@Composable
+private fun VpnDisclosureOverlay(
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Local Firewall Permission",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "NullFlow works as an on-device firewall. It cuts off internet access for the specific apps you choose to block. Android requires a local network permission (shown as a VPN by the system) to do this.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.75f),
+                textAlign = TextAlign.Center,
+                lineHeight = 24.sp
+            )
+            Spacer(Modifier.height(24.dp))
+            DisclosureBulletOverlay("All filtering happens locally on this device.")
+            Spacer(Modifier.height(10.dp))
+            DisclosureBulletOverlay("Your traffic is never routed through external servers.")
+            Spacer(Modifier.height(10.dp))
+            DisclosureBulletOverlay("No network data is collected, logged, or stored.")
+            Spacer(Modifier.height(10.dp))
+            DisclosureBulletOverlay("Apps you do not block are completely unaffected.")
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 26.dp)
+                .padding(bottom = 34.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFF2A2F3A), RoundedCornerShape(16.dp))
+                        .clickable(onClick = onDecline)
+                        .height(56.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Not Now",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1.6f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF00E5FF), Color(0xFF00B8D4))
+                            )
+                        )
+                        .shadow(
+                            elevation = 10.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            ambientColor = Color(0xFF00E5FF).copy(alpha = 0.3f),
+                            spotColor = Color(0xFF00E5FF).copy(alpha = 0.3f)
+                        )
+                        .clickable(onClick = onAccept)
+                        .height(56.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "I Understand & Continue",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0A0C10)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisclosureBulletOverlay(text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(26.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF00E5FF).copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(14.dp)) {
+                val stroke = 2.5.dp.toPx()
+                drawLine(
+                    color = Color(0xFF00E5FF),
+                    start = Offset(size.width * 0.1f, size.height * 0.52f),
+                    end = Offset(size.width * 0.4f, size.height * 0.82f),
+                    strokeWidth = stroke
+                )
+                drawLine(
+                    color = Color(0xFF00E5FF),
+                    start = Offset(size.width * 0.4f, size.height * 0.82f),
+                    end = Offset(size.width * 0.9f, size.height * 0.18f),
+                    strokeWidth = stroke
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.8f)
+        )
     }
 }
 

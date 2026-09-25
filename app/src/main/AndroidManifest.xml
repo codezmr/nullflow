@@ -28,7 +28,8 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -88,11 +89,15 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Auto-start shield on boot -->
+        <!-- Auto-start shield on boot. The RECEIVE_BOOT_COMPLETED permission
+             gate stops any third-party app from forging a boot intent to
+             force-start the shield; the OS boot broadcast still gets through
+             because the system holds the permission. -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>

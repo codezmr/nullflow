@@ -17,6 +17,10 @@ captures/
 *.aab
 *.ap_
 
+# Keystores (NEVER commit signing keys)
+*.keystore
+*.jks
+
 # Build outputs
 apps/*/app/build/
 apps/*/build/
