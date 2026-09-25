@@ -10,6 +10,7 @@
 [![Root](https://img.shields.io/badge/Root-Not_Required-2E3440?style=for-the-badge)](#requirements)
 [![License](https://img.shields.io/badge/License-MIT-4C566A?style=for-the-badge)](#license)
 [![Size](https://img.shields.io/badge/Size-~12_MB-88C0D0?style=for-the-badge)](#install)
+[![Privacy](https://img.shields.io/badge/Privacy-Zero--Data-00E5FF?style=for-the-badge)](#absolute-privacy-doctrine)
 
 Select the apps that distract you. Flip the switch. <br>
 NullFlow silently drops their network traffic into the void through a local VPN tunnel.
@@ -49,6 +50,7 @@ The apps still function locally, but their feeds, notifications, and updates are
 | **Telemetry HUD** | Track intercept counts, top offenders, 7-day heatmaps, and total focus time. |
 | **Conflict Detection** | Gracefully disengages if another VPN claims the Android slot (no false positives). |
 | **OEM Routing** | Built-in *Don'tKillMyApp* autostart routing for Xiaomi, Oppo, Vivo, and OnePlus. |
+| **Compliance Layer** | Mandatory in-app firewall disclosure with affirmative consent before the OS permission prompt (Google Play `VpnService` policy). |
 
 ---
 
@@ -56,10 +58,11 @@ The apps still function locally, but their feeds, notifications, and updates are
 
 > **NullFlow is a shield, not a sensor.** 
 
-1. **No Outbound Calls:** NullFlow makes absolutely zero network requests. 
+1. **No Outbound Calls:** NullFlow makes absolutely zero network requests. The app does not even hold the `INTERNET` permission.
 2. **Local Processing:** The VPN tunnel exists only on your device; packets never leave the hardware.
-3. **Zero Telemetry:** No analytics, no crash reporting, no tracking.
-4. **Offline Storage:** All modes, schedules, and stats are stored entirely offline via Room (SQLite).
+3. **Zero Telemetry:** No analytics, no crash reporting, no tracking. Verified by MobSF static analysis: 0 trackers detected.
+4. **Offline Storage:** All modes, schedules, and stats are stored entirely offline via Room (SQLite). Application backup is disabled (`allowBackup=false`), so the database cannot be extracted via `adb backup`.
+5. **Privacy Policy:** [shutupchat.com/nullflow/privacy](https://shutupchat.com/nullflow/privacy)
 
 ---
 
@@ -78,7 +81,7 @@ The [landing page](https://shutupchat.com/nullflow) has a "Download APK" button 
 <br>
 
 1. Navigate to [Releases](https://github.com/codezmr/nullflow/releases).
-2. Download `NullFlow-v1.4.0.apk`.
+2. Download `NullFlow-v1.4.1.apk`.
 3. Install the APK (ensure "Install unknown apps" is enabled).
 4. Complete the 3-step onboarding.
 5. Add the NullFlow tile to your Quick Settings panel.
@@ -114,9 +117,11 @@ nullflow/
 │   ├── data/             # Room DB, FocusSchedules, OEM Autostart routing
 │   ├── service/          # Boot/Session Receivers, AlarmManager scheduling
 │   ├── ui/               # Compose Screens (Reactor Core, Dashboards, Sheets)
+│   │   └── NullFlowTheme.kt  # Design system: colors, shapes (see AGENTS.md)
 │   ├── tile/             # Quick Settings Tile Service integration
 │   ├── MainActivity.kt   # App entry point & session reconciliation
 │   └── AppLog.kt         # Local-only file logger (opt-in)
+├── play-store/           # Play Console listing copy + store assets
 └── build.gradle.kts      # AGP 8.5.2 / Gradle 8.7
 ```
 

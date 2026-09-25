@@ -102,6 +102,81 @@ app/src/main/java/com/codezmr/nullflow/
 - The QS tile panel uses `RemoteViews`-safe layouts only (LinearLayout, no ConstraintLayout).
 - App icons: use `AppIconLoader` (async, cached). Never load icons on the main thread.
 
+### Design System (MANDATORY - do not deviate)
+
+The app has a strict visual identity: **pure dark, neon-cyan accents, "rest mode" aesthetic**. Every new screen, sheet, card, or component MUST follow the tokens and patterns below. If a design decision is not covered here, copy the pattern from the closest existing screen (`MainScreen.kt`, `OnboardingScreen.kt`, `SettingsScreen.kt`) rather than inventing a new style.
+
+#### Color Tokens
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `PureBlack` | `#0A0A0C` | App background (onboarding, full-screen overlays) |
+| `SurfaceDark` | `#141418` | Secondary surfaces, inner circles |
+| `CardBg` | `#12151C` | Cards, sheets, dialog panels |
+| `CardBgAlt` | `#1A1E26` | Gradient card start (telemetry cards) |
+| `Border` | `#222733` | Default 1dp borders on cards/rows |
+| `BorderAlt` | `#2A2F3A` | Disabled button bg, inactive borders |
+| `NeonCyan` | `#00E5FF` | **Primary accent**: CTAs, active states, icons, links |
+| `CyanDeep` | `#00B8D4` | CTA gradient end (pair with NeonCyan) |
+| `IcyBlue` | `#4FC3F7` | Onboarding feature icons, secondary accents |
+| `ElectricBlue` | `#2979FF` | Ambient glow gradients only |
+| `StarkWhite` | `#F2F4F8` | Primary text |
+| `TextMuted` | `#A0A0A0` | Secondary text (use `StarkWhite.copy(alpha = 0.5f)` for inline) |
+| `TextFaint` | `#808080` | Tertiary text, disabled labels |
+| `ReactorGreen` | `#3DDC84` | **Shield ACTIVE state only**: Reactor Core, success, granted checks |
+| `ReactorGreenDark` | `#207A48` | Reactor core gradient |
+| `PacketRed` | `#EF4444` | Intercepted packets (Reactor Core animation only) |
+| `HeatAmber` | `#FFB300` | Heat engine mid-range (intercept activity) |
+| `HeatOrange` | `#FF9500` / `#FF3D00` | Heat engine high-range |
+| `ErrorRed` | `#FF3B30` | Destructive actions, warnings, OEM kill card |
+
+**Rules:**
+- The app is **ALWAYS dark**. Never introduce light mode, white backgrounds, or Material default light colors.
+- `MaterialTheme.colorScheme` (defined in `NullFlowTheme.kt`) exists for M3 components, but most screens use the raw hex tokens above directly. Follow the local file's convention.
+- **State colors:** OFF/inactive = `#2A2F3A` borders, muted text. ON/active = `NeonCyan` (UI) or `ReactorGreen` (Reactor Core hero). Never use green for generic UI accents - green is reserved for the shield-active state.
+- Gradients: CTAs use `Brush.linearGradient(listOf(NeonCyan, CyanDeep))`. Cards use subtle vertical gradients (`#1A1E26` to `#10131A`). Never use rainbow or multi-stop gradients.
+
+#### Typography
+
+- Font: system default (no custom fonts). `FontFamily.Monospace` for: version strings, "Crafted by CodeZMR" signature, telemetry numbers, code-like labels.
+- Headings: `headlineSmall`/`headlineMedium` + `FontWeight.Bold` + `StarkWhite`.
+- Body: `bodyLarge` (primary) / `bodyMedium` (secondary) / `bodySmall` (captions).
+- Labels: `labelSmall` + `FontWeight.Medium`/`Bold` for button text and badges.
+- Line height: set explicitly on multi-line text (`lineHeight = 22.sp` to `24.sp`).
+- Text alpha hierarchy: primary `1.0f`, secondary `0.75f`, tertiary `0.5f`, faint `0.35f` (always of `StarkWhite` or `Color.White`).
+
+#### Shapes & Elevation
+
+- Corner radii: buttons/CTAs `14-16dp`, cards/rows `18-22dp`, sheets `24dp`, pills/badges `20dp+` (full round), icons-in-circles `CircleShape`.
+- Borders: `1.dp` default (`#222733`); `2.dp` for active/granted states (`NeonCyan` or `ReactorGreen`).
+- Shadows: subtle. Cards `elevation = 4.dp`; active/granted cards `elevation = 10-12.dp` with `ambientColor`/`spotColor` = accent at `alpha 0.3-0.55f`; CTAs `elevation = 8-10.dp`. Never use flat elevation-less cards or heavy drop shadows.
+
+#### Component Patterns (reuse, don't reinvent)
+
+- **CTA buttons:** use `PrimaryButton` / `SecondaryButton` / `GhostButton` / `SmallActionButton` from `ui/Buttons.kt`. Full-width, `14dp` radius, cyan bg + dark text (`#0A0C10`) for primary. Onboarding-style CTAs: `56dp` height, `16dp` radius, cyan gradient.
+- **Cards/rows:** `CardBg` background, `1dp` `Border`, `18-22dp` radius, `16-18dp` inner padding. Status circle on the left (`30dp`, check mark when active) + title (`bodyLarge`, `SemiBold`) + subtitle (`bodySmall`, muted).
+- **Icons:** Canvas-drawn line icons (see `FeatureIcon` in `OnboardingScreen.kt`) or `ic_*.xml` vector drawables. `18-24dp` size, `2-2.5dp` stroke, accent color. Never use emoji or third-party icon fonts.
+- **Ambient glow:** full-screen `Box` with `Brush.radialGradient` (accent at `0.10-0.18f` alpha fading to 0), positioned off-center. Used on onboarding + hero screens for depth. Non-interactive.
+- **Sheets/overlays:** dimmed scrim `Color.Black.copy(alpha = 0.6f)` + `clickable` to dismiss; panel centered or bottom-aligned, `24dp` radius, real background (never transparent).
+- **Animations:** `animateColorAsState` / `animateFloatAsState` with `tween(300, FastOutSlowInEasing)` for state changes; `rememberInfiniteTransition` for ambient loops (Reactor Core). Springs only for interactive elements.
+
+#### Layout
+
+- Horizontal screen padding: `26.dp` (onboarding/full-screen) or `16-20.dp` (dashboard content).
+- Section spacing: `24-32.dp` between major sections; `10-14.dp` between list rows.
+- Bottom action bars: pinned with `Modifier.align(Alignment.BottomCenter)`, `PureBlack` background, `34.dp` bottom padding.
+- The dashboard is a single `LazyColumn` (`MainScreen.kt`): Reactor Core hero at top, then telemetry console, then history. New dashboard sections go inside this column, not in new screens.
+
+#### Forbidden
+
+- Light themes, white/cream backgrounds, Material default purple/blue.
+- Emoji in any UI string (Canvas icons only).
+- Em-dashes in strings/comments (hyphens only).
+- New accent colors outside the token table (no pink, no orange UI accents, no yellow buttons).
+- `Dialog`/`AlertDialog` in QS tile context.
+- Loading app icons on the main thread.
+- Hardcoded colors that duplicate an existing token (reference the token or the file-local val).
+
 ### Logging
 
 - Use `AppLog.d()`, `AppLog.w()`, `AppLog.e()` (tag: `NullFlow`).
