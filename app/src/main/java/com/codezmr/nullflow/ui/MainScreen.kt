@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -1574,6 +1575,28 @@ private fun HeroToggle(
                         )
                     )
             )
+
+            // Vortex rings (icon swirl motif) - visible when active
+            if (isActive) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = this.size.width
+                    val h = this.size.height
+                    val c = Offset(w / 2, h / 2)
+                    val baseR = minOf(w, h) / 2 - 6.dp.toPx()
+                    drawCircle(
+                        color = coreColor.copy(alpha = 0.2f),
+                        radius = baseR * 0.78f,
+                        center = c,
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                    drawCircle(
+                        color = coreColor.copy(alpha = 0.12f),
+                        radius = baseR * 0.58f,
+                        center = c,
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                }
+            }
 
             // ---- Center content: live count when armed, countdown during pass, OFF when disarmed ----
             if (isActive && isPassActive) {

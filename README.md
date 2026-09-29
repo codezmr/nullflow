@@ -81,7 +81,7 @@ The [landing page](https://shutupchat.com/nullflow) has a "Download APK" button 
 <br>
 
 1. Navigate to [Releases](https://github.com/codezmr/nullflow/releases).
-2. Download `NullFlow-v1.4.1.apk`.
+2. Download `NullFlow-v1.4.3.apk`.
 3. Install the APK (ensure "Install unknown apps" is enabled).
 4. Complete the 3-step onboarding.
 5. Add the NullFlow tile to your Quick Settings panel.

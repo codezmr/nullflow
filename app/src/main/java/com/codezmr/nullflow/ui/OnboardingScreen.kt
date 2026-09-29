@@ -669,8 +669,8 @@ private fun FeatureIcon(kind: String) {
 }
 
 // ---- Reactor Core hero (welcome screen) ----
-private val ReactorGreen = Color(0xFF3DDC84)
-private val ReactorGreenDark = Color(0xFF207A48)
+private val ReactorCyan = Color(0xFF00E5FF)
+private val ReactorCyanDeep = Color(0xFF006B7A)
 private val ReactorVoid = Color(0xFF050505)
 private val PacketRed = Color(0xFFEF4444)
 
@@ -781,7 +781,7 @@ private fun SonarHero() {
                     alpha = rippleAlpha
                 }
                 .clip(CircleShape)
-                .border(2.dp, ReactorGreen, CircleShape)
+                .border(2.dp, ReactorCyan, CircleShape)
         )
 
         // 2) Orbit ring A (dashed, clockwise).
@@ -795,7 +795,7 @@ private fun SonarHero() {
             while (start < circumference) {
                 val end = (start + dash).coerceAtMost(circumference)
                 drawArc(
-                    color = ReactorGreen.copy(alpha = 0.35f),
+                    color = ReactorCyan.copy(alpha = 0.35f),
                     startAngle = (start / circumference) * 360f,
                     sweepAngle = ((end - start) / circumference) * 360f,
                     useCenter = false,
@@ -812,14 +812,14 @@ private fun SonarHero() {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.minDimension / 2 - 1.dp.toPx()
             drawCircle(
-                color = ReactorGreen.copy(alpha = 0.4f),
+                color = ReactorCyan.copy(alpha = 0.4f),
                 radius = radius,
                 center = center,
                 style = Stroke(width = 1.dp.toPx())
             )
             // A bright "comet" dot riding this ring.
             drawCircle(
-                color = ReactorGreen,
+                color = ReactorCyan,
                 radius = 3.dp.toPx(),
                 center = Offset(center.x + radius, center.y)
             )
@@ -833,7 +833,7 @@ private fun SonarHero() {
                 val angle = (i * 15f) * Math.PI / 180f
                 val tickRadius = radius - 6.dp.toPx()
                 drawLine(
-                    color = ReactorGreen.copy(alpha = 0.5f),
+                    color = ReactorCyan.copy(alpha = 0.5f),
                     start = center + Offset(
                         tickRadius * cos(angle).toFloat(),
                         tickRadius * sin(angle).toFloat()
@@ -847,26 +847,42 @@ private fun SonarHero() {
             }
         }
 
-        // 5) Core.
+        // 5) Core with vortex rings (icon swirl motif).
         Box(
             modifier = Modifier
                 .size(70.dp)
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(ReactorVoid, ReactorGreenDark.copy(alpha = 0.6f))
+                        colors = listOf(ReactorVoid, ReactorCyanDeep.copy(alpha = 0.6f))
                     )
                 )
-                .border(1.dp, ReactorGreen.copy(alpha = corePulse), CircleShape)
+                .border(1.dp, ReactorCyan.copy(alpha = corePulse), CircleShape)
                 .shadow(elevation = 14.dp, shape = CircleShape),
             contentAlignment = Alignment.Center
         ) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val c = Offset(size.width / 2, size.height / 2)
+                val baseR = size.minDimension / 2 - 4.dp.toPx()
+                drawCircle(
+                    color = ReactorCyan.copy(alpha = 0.3f),
+                    radius = baseR * 0.72f,
+                    center = c,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
+                    color = ReactorCyan.copy(alpha = 0.18f),
+                    radius = baseR * 0.48f,
+                    center = c,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+            }
             Text(
                 text = "NF",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
-                color = ReactorGreen
+                color = ReactorCyan
             )
         }
 
@@ -896,7 +912,7 @@ private fun SonarHero() {
                 if (t > 0.92f) {
                     val flash = (t - 0.92f) / 0.08f
                     drawCircle(
-                        color = ReactorGreen.copy(alpha = 0.5f * (1f - flash)),
+                        color = ReactorCyan.copy(alpha = 0.5f * (1f - flash)),
                         radius = coreRadius * (0.6f + flash * 0.5f),
                         center = center,
                         style = Stroke(width = 2.dp.toPx())

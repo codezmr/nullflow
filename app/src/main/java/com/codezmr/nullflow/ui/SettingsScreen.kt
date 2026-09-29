@@ -65,8 +65,8 @@ private val SfgAccent = Color(0xFF00E5FF)
 private val SfgMuted = Color(0xFF808080)
 private val SfgText = Color(0xFFE6EAF0)
 private val SfgVoid = Color(0xFF050505)
-private val SfgGreen = Color(0xFF3DDC84)
-private val SfgGreenDark = Color(0xFF207A48)
+private val SfgCyan = Color(0xFF00E5FF)
+private val SfgCyanDeep = Color(0xFF006B7A)
 
 @Composable
 fun SettingsScreen(
@@ -655,7 +655,7 @@ fun ReactorCore(coreSize: Dp = 96.dp) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.minDimension / 2 - 4.dp.toPx()
             drawCircle(
-                color = SfgGreen.copy(alpha = 0.3f),
+                color = SfgCyan.copy(alpha = 0.3f),
                 radius = radius,
                 center = center,
                 style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
@@ -664,7 +664,7 @@ fun ReactorCore(coreSize: Dp = 96.dp) {
                 val angle = (i * 15f) * Math.PI / 180f
                 val tickRadius = radius - 6.dp.toPx()
                 drawLine(
-                    color = SfgGreen.copy(alpha = 0.5f),
+                    color = SfgCyan.copy(alpha = 0.5f),
                     start = center + Offset(
                         (tickRadius * cos(angle)).toFloat(),
                         (tickRadius * sin(angle)).toFloat()
@@ -683,18 +683,34 @@ fun ReactorCore(coreSize: Dp = 96.dp) {
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(SfgVoid, SfgGreenDark.copy(alpha = 0.6f))
+                        colors = listOf(SfgVoid, SfgCyanDeep.copy(alpha = 0.6f))
                     )
                 )
-                .border(1.dp, SfgGreen.copy(alpha = 0.55f), CircleShape),
+                .border(1.dp, SfgCyan.copy(alpha = 0.55f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val c = Offset(size.width / 2, size.height / 2)
+                val baseR = size.minDimension / 2 - 3.dp.toPx()
+                drawCircle(
+                    color = SfgCyan.copy(alpha = 0.3f),
+                    radius = baseR * 0.72f,
+                    center = c,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
+                    color = SfgCyan.copy(alpha = 0.18f),
+                    radius = baseR * 0.48f,
+                    center = c,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+            }
             Text(
                 text = "NF",
                 fontSize = (coreSize.value * 0.19f).sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
-                color = SfgGreen
+                color = SfgCyan
             )
         }
     }
@@ -713,10 +729,10 @@ private fun AboutCard(
             .clip(RoundedCornerShape(16.dp))
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(Color(0xFF0D1410), SfgVoid)
+                    colors = listOf(Color(0xFF0A1420), SfgVoid)
                 )
             )
-            .border(1.dp, SfgGreen.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+            .border(1.dp, SfgCyan.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
             .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
         // Hero: static reactor core (the animated version lives on the
@@ -746,7 +762,7 @@ private fun AboutCard(
             fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 2.sp,
-            color = SfgGreen,
+            color = SfgCyan,
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(12.dp))
@@ -809,7 +825,7 @@ private fun AboutStat(label: String) {
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = FontFamily.Monospace,
-            color = SfgGreen
+            color = SfgCyan
         )
     }
 }

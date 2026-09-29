@@ -1,7 +1,13 @@
 package com.codezmr.nullflow.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
@@ -50,11 +56,26 @@ fun PrimaryButton(
         targetValue = if (enabled) BtnCyan else BtnCyan.copy(alpha = 0.4f),
         label = "btn_bg"
     )
+    val transition = rememberInfiniteTransition(label = "btnGlow")
+    val glowPulse by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "btnGlowPulse"
+    )
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(14.dp))
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(14.dp),
+                ambientColor = if (enabled) BtnCyan.copy(alpha = glowPulse) else Color.Transparent,
+                spotColor = if (enabled) BtnCyan.copy(alpha = glowPulse) else Color.Transparent
+            )
             .clip(RoundedCornerShape(14.dp))
             .background(bg)
             .clickable(enabled = enabled, onClick = onClick)
